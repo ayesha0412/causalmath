@@ -1,0 +1,6 @@
+*.log
+*.tmp
+.DS_Store
+node_modules/
+LLaMA-Factory/
+models--Anjie6--sft-qwen-7b/
