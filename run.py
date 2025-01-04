@@ -2,8 +2,9 @@ import json
 from transformers import pipeline
 from openai import AzureOpenAI
 from get_dag import  convert_gpt_output_to_json_and_dag, extract_json_from_gpt_output
-from prompt import reasoning_prompt, q_prompt, get_dag_prompt
+from prompt import reasoning_prompt, q_prompt, get_dag_prompt, get_flow_graph ,get_json
 from visualize import plot_causal_graph
+from visualize_flow import visualize_flowchart
 
 # Load the model
 pipe = pipeline("text-generation", model="/home/yxn/causalmath/models--Anjie6--sft-qwen-7b/snapshots/1", torch_dtype="auto", device_map="auto")
@@ -27,35 +28,49 @@ client = AzureOpenAI(
     )
 
 
-# Prepare input messages for DAG extraction
+ # Prepare input messages for DAG extraction
 messages2 = [
-    {"role": "system", "content": get_dag_prompt},
-    {"role": "user", "content": reasoning_steps}
-]
+     {"role": "system", "content": get_flow_graph},
+     {"role": "user", "content": reasoning_steps}
+ ]
 
 response = client.chat.completions.create(
             model="gpt-35-turbo",
             messages=messages2,
         )
-nodes_and_edges = response.choices[0].message.content
+flow_chart = response.choices[0].message.content
 
 # # Get nodes and edges for the DAG (adjust token limit again)
 # nodes_and_edges = pipe(messages2, max_new_tokens=1024)[0]["generated_text"][3]["content"]
 print("================================================")
-print("Nodes and Edges:\n", nodes_and_edges)
+print(flow_chart)
 
-json_str = extract_json_from_gpt_output(nodes_and_edges)
+messages3 = [
+     {"role": "system", "content": get_json},
+     {"role": "user", "content": flow_chart}
+ ]
+response2 = client.chat.completions.create(
+            model="gpt-35-turbo",
+            messages=messages3,
+        )
+json_str = response2.choices[0].message.content
+print("================================================")
+print(json_str)
 
-# Get the nodes, edges, and the DAG object
-nodes, edges, dag = convert_gpt_output_to_json_and_dag(json_str)
+
+visualize_flowchart(json_str)
+# json_str = extract_json_from_gpt_output(nodes_and_edges)
+
+# # Get the nodes, edges, and the DAG object
+# nodes, edges, dag = convert_gpt_output_to_json_and_dag(json_str)
 
 
-# Print results
-print("Nodes:", json.dumps(nodes, indent=2))
-print("Edges:", json.dumps(edges, indent=2))
-# # Extract the DAG structure
-# dag = parse_dag(nodes_and_edges)
+# # Print results
+# print("Nodes:", json.dumps(nodes, indent=2))
+# print("Edges:", json.dumps(edges, indent=2))
+# # # Extract the DAG structure
+# # dag = parse_dag(nodes_and_edges)
 
-print("DAG:\n", dag)
+# print("DAG:\n", dag)
 
-plot_causal_graph(dag, file_name="dag_test")
+# plot_causal_graph(dag, file_name="dag_test")

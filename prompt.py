@@ -21,7 +21,7 @@ Example JSON Output:
 
 {
   "question": "Problem description",
-  "final_answer": "198",
+  "final_answer": "",
   "reasoning_steps": {
     "text": "Problem description.",
     "mc_value": null,
@@ -47,7 +47,7 @@ Example JSON Output:
 
 # q_prompt = """what is the 5+6*2?"""
 
-q_prompt = """What is the value of $y$ in the equation $\\frac{30}{50}=\\sqrt{\\frac{y}{50}}$?"""
+q_prompt = """1+1=?"""
 
 get_dag_prompt = """I will provide you with detailed reasoning steps. Your task is to generate a causal graph based on this data, strictly following these instructions:
 
@@ -66,6 +66,7 @@ get_dag_prompt = """I will provide you with detailed reasoning steps. Your task 
     - If the formula is computable, the value of the node must always have a corresponding value computed from the formula.
     - Constants and numerical values in the formula do not need to come from parent nodes.
     - Each node must always contain three keys: label, formula, and value.
+    - **The formula and value must not be empty.** If the value cannot be calculated, fill in “None.”
 
 2. **Edges**: Capture the logical relationships between the nodes. These edges should represent dependencies, such as:
     - "Pythagorean Theorem".
@@ -93,3 +94,34 @@ Carefully ensure the correctness of nodes and edges to maintain logical clarity.
   ]
 }
 ```"""
+
+get_flow_graph = """
+Generate a flowchart strictly following the steps provided below. Ensure to include all redundant reasoning, unnecessary details, and every mathematical expression or numerical calculation exactly as they appear in the original text. Do not reduce or omit any part of the original text; preserve every detail, word, number, and mathematical calculation process exactly as written. In the flowchart, explicitly write out all mathematical computations and calculations, step by step, without simplifying or omitting any part of the process. Do not streamline or condense the reasoning; maintain the verbose and elaborate explanations entirely. 
+
+Ensure to demonstrate the logical connections between steps, taking into account that the problem-solving process does not necessarily follow a strict sequential order. Arrows in the flowchart should reflect any jumps, loops, or cyclical relationships that exist between the steps. If the process includes steps that involve reflection, review, or rethinking, the arrows should point back to previous nodes to indicate the flow's non-linear nature. 
+
+Use text representation only, no need to generate an actual image.
+"""
+
+get_json = """
+Generate a strictly formatted JSON structure based on the provided information, following the format:
+{
+  "nodes": {
+    "1": "detail description of step 1",
+    "2": "detail description of step 2",
+    //... more nodes...
+  },
+  "edges": [
+    { "source_node": "node1", "target_node": "node2" },
+    { "source_node": "node2", "target_node": "node3" },
+    { "source_node": "node3", "target_node": "node1" }
+    //... more edges...
+  ]
+}
+
+Preserve all original information without simplifying or omitting any part.
+Retain all numerical calculations and processes, and display them in the values of the nodes.
+Every step description must be kept intact.
+If the reasoning process includes repetition, review, reflection, or any similar steps, the arrows in the flowchart must point back to the previous nodes.
+Consider the logical relationships between the steps—arrows may not follow a strict sequence and could form loops.
+"""

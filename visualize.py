@@ -34,3 +34,26 @@ def plot_causal_graph(causal_graph, file_name):
     
     # Return the image for display
     return Image(filename=f"{file_name}.png")
+
+
+import graphviz
+
+def create_simple_causal_graph():
+    # Create a directed graph
+    graph = graphviz.Digraph(format='png', engine='dot')
+    
+    # Add nodes representing the reasoning steps
+    graph.node("Step1", "1 + 1 = ?", color="lightblue", style="filled")
+    graph.node("Step2", "The result is 2", color="lightgreen", style="filled")
+    
+    # Add an edge showing the causal connection
+    graph.edge("Step1", "Step2", label="Perform the addition")
+    
+    # Render and save the image
+    file_path = 'simple_causal_graph.png'
+    graph.render(file_path)
+    
+    return file_path
+
+# Generate and return the image
+create_simple_causal_graph()
