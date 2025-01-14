@@ -8,7 +8,7 @@ def is_equivalent_answer(final_answer, ground_truth):
     Respond with "yes" if the answers convey the same meaning, even if they are written differently. Respond with "no" otherwise.
     """ 
     print('进行答案对比：')
-    print(final_answer,ground_truth)
+    print("ground_truth:",ground_truth,"final_answer:",final_answer)
     client = openai.AzureOpenAI(
         azure_endpoint="https://feng-cloud-openai.openai.azure.com/",
         api_key="e51a662bf2934ff585b9e53b21b7f6c2",
