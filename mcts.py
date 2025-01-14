@@ -244,26 +244,26 @@ class OmegaPRM:
         - N (int): Maximum search count.
         """
         self.LM = LM  # Language Model
-        self.expected_answer = None
-        self.c_puct = c_puct
-        self.alpha = alpha
+        self.expected_answer = None # 预期的答案，用于后续的正确性检查，初始化时为 None，之后会被设置为问题的正确答案。
+        self.c_puct = c_puct # 探索常数，用于控制搜索过程中的探索与利用之间的平衡。通常在蒙特卡罗树搜索（MCTS）中使用，值越大，表示对探索的倾向越强。
+        self.alpha = alpha # 蒙特卡罗估计的权重，影响蒙特卡罗模拟过程中估算的值。alpha 的值较大时，蒙特卡罗估计在决策过程中的作用越强。
         self.beta = beta
-        self.L = L
-        self.k = k
-        self.N = N
-        self.rollout_budget = rollout_budget
-        self.save_data_tree = save_data_tree
+        self.L = L # 最大解答长度，控制答案的最大字数或 token 数量。
+        self.k = k # 蒙特卡罗模拟的回合数，控制在评估每个候选解时进行的蒙特卡罗模拟的次数，回合数越多，估计结果的精度越高。
+        self.N = N # 最大搜索次数，控制在整个搜索过程中最多进行多少次搜索。
+        self.rollout_budget = rollout_budget # 回合预算，控制在每个回合中可以进行多少次模拟，影响算法的性能和精度。
+        self.save_data_tree = save_data_tree # 控制是否保存搜索树的数据，用于调试或进一步分析
 
-        self.T = SearchTree()
-        self.C = CandidatePool()
+        self.T = SearchTree() # 搜索树，用于存储和管理问题的解答路径
+        self.C = CandidatePool() # 表示候选池，用于存储当前的候选解。
 
-        self.n = 0
-        self.total_rollouts = 0
-
-
+        self.n = 0 # 当前搜索的次数，初始化为 0
+        self.total_rollouts = 0 # 当前搜索的次数，初始化为 0
 
 
-    def reset(self):
+
+
+    def reset(self): # 重置算法的内部状态
         """Reset internal state variables to prepare for a fresh run."""
         self.expected_answer = None
         self.T = SearchTree()  # Reset search tree
@@ -286,17 +286,19 @@ class OmegaPRM:
 
         print(f"Running OmegaPRM for question: '{question}'\n")
         # Initialization
-        initial_state = State(solution_prefix=question, parent=None)
-        self.expected_answer = answer
-        self.T.root = initial_state
-        self.T.add_state(initial_state)
-        self.n = 0
+        # State 类的作用是表示解答过程中的一个状态，包含当前部分解答（solution_prefix）和父状态（parent）
+        initial_state = State(solution_prefix=question, parent=None) # 其中 solution_prefix 是问题本身。parent=None 表示这是根状态，作为搜索树的起点。
+        self.expected_answer = answer # 期望的答案，用于后续的正确性检查。
+        self.T.root = initial_state # 将 initial_state 设置为搜索树的根节点。
+        self.T.add_state(initial_state) #  将初始状态添加到搜索树中。
+        self.n = 0 # 初始化搜索计数器为零，表示当前搜索次数。
 
         # Monte Carlo Estimation for initial_state
-        self.monte_carlo_estimation(initial_state)
+        self.monte_carlo_estimation(initial_state) # monte_carlo_estimation 会进行 k 次回合（rollouts）模拟，计算当前状态的评估值。
 
         # Main loop
         while self.n < self.N and self.total_rollouts < self.rollout_budget and not self.C.is_empty():
+            # 搜索次数未超过最大限制 & 总的回合数未超过预算 & 候选池不为空，即仍有解可以探索
             # Selection Phase
             selected_state, selected_rollout = self.selection_phase()
             if selected_state is None or selected_rollout is None:
@@ -309,7 +311,7 @@ class OmegaPRM:
             self.maintenance_phase(selected_state)
 
             # Increment search count
-            self.n += 1
+            self.n += 1 # 每执行一次循环，self.n 计数器会递增，表示一次搜索操作的完成。
 
         if self.save_data_tree:
             data = self.collect_tree_structure()
@@ -317,29 +319,32 @@ class OmegaPRM:
             data = self.collect_solution_prefixes()
         return data
 
-    def monte_carlo_estimation(self, state: State):
+    def monte_carlo_estimation(self, state: State):# 它通过生成多个回合（rollouts）来计算当前状态的蒙特卡罗评分 MC(s)，其中 MC(s) 是正确回合数与总回合数之比。这个评分反映了当前状态生成正确答案的可能性
         """
         Perform Monte Carlo estimation for state by generating k rollouts
         and computing MC(s) = c / k, where c is the number of correct rollouts.
         """
-        c = 0  # Correct rollouts count
+        c = 0  # Correct rollouts count # 用于计数“正确”的回合数（即与期望答案一致的回合数）。
         incorrect_rollouts = []
-        correct_rollouts = []
-        batct_rollouts = self.LM.generate_rollout(state.solution_prefix, self.k)
+        correct_rollouts = [] # 分别用于保存不正确和正确的回合（用于调试和分析）。
+        batct_rollouts = self.LM.generate_rollout(state.solution_prefix, self.k) #  调用语言模型生成回合
 
         # Increment visit count of selected state
-        state.N += 1
+        state.N += 1 # 增加状态的访问计数，表示该状态被访问过一次。
 
-        for i, rollout in enumerate(batct_rollouts):
+        for i, rollout in enumerate(batct_rollouts): # 每次生成一个新的回合，self.total_rollouts 增加 1，记录总的回合数。
             # Increment number of total rollouts
             self.total_rollouts += 1
 
             # Generate rollout r_i
 
-            state.add_rollout(rollout)
+            state.add_rollout(rollout) # 将当前回合添加到状态中，表示该状态的模拟回合之一。
 
             # Evaluate correctness of final answer in rollout
+            ## ！！！ 要是改判断答案是否正确，在这里改
+            # 将当前状态的部分解答（state.solution_prefix）与回合（rollout）拼接起来，形成完整的解答。strip() 方法用于去掉前后的空白字符。
             full_solution = (state.solution_prefix + '\n\n' + rollout).strip() if state.solution_prefix else rollout
+            # 使用语言模型评估生成的完整解答是否正确，判断其是否与期望的答案（self.expected_answer）一致。
             is_correct = self.LM.evaluate_correctness(full_solution, self.expected_answer)
 
             # print(f"Rollout {i + 1} Correctness: {'Correct' if is_correct else 'Incorrect'}\n")
@@ -388,11 +393,15 @@ class OmegaPRM:
         Q_value = (self.alpha ** (1 - state.MC)) * (self.beta ** length_penalty)
         return Q_value
 
-    def compute_U(self, state: State) -> float:
+    def compute_U(self, state: State) -> float: #  U值，即状态的不确定性。它是蒙特卡罗树搜索（MCTS）中常见的探索性评分
         """
         Compute U(s) = c_puct * sqrt(sum_{s'} N(s')) / (1 + N(s))
         """
-        N_total = sum(s.N for s in self.T.nodes)
+        
+    # c_puct：控制探索程度的常数。
+	# N(s)：当前状态 state 的访问计数。该计数越大，表示该状态被探索得越多。
+	# N_total：表示整个搜索树中所有状态的访问计数的总和。通过总的访问计数来衡量当前状态的相对探索程度。
+        N_total = sum(s.N for s in self.T.nodes) # 表示整个搜索树中所有状态的访问计数的总和。通过总的访问计数来衡量当前状态的相对探索程度。
         if N_total == 0:
             N_total = 1  # Prevent division by zero
         U_s = self.c_puct * (math.sqrt(N_total)) / (1 + state.N)
@@ -404,26 +413,32 @@ class OmegaPRM:
         """
         Q_s_r = self.compute_Q(state, rollout)
         U_s = self.compute_U(state)
-        score = Q_s_r + U_s
+        score = Q_s_r + U_s # 此方法计算状态 s 和回合 r 的 选择性评分。该评分结合了当前状态的质量评分（Q(s, r)）和探索性评分（U(s)）。
         return score
 
-    def selection_phase(self) -> Tuple[Optional[State], Optional[str]]:
+    def selection_phase(self) -> Tuple[Optional[State], Optional[str]]: # 在这个阶段，算法从候选池（self.C）中选择一个具有最高选择性评分的状态-回合对进行扩展。
         """
         Select (state, rollout) with the highest score from candidate pool C.
         """
         selected_state, selected_rollout = self.C.pop()
         return selected_state, selected_rollout
 
-    def add_correct_rollout_to_tree(self, parent_state: State, rollout: str):
+    def add_correct_rollout_to_tree(self, parent_state: State, rollout: str): # 此方法用于将一个正确的回合添加到搜索树中，并将其作为父状态的子节点。
         """
         Add the correct rollout to the tree as a child of parent_state.
         """
+        # 拼接回答
         new_solution_prefix = (parent_state.solution_prefix + '\n\n' + rollout).strip() if parent_state.solution_prefix else rollout
+        # 创建新状态
         new_state = State(solution_prefix=new_solution_prefix, parent=parent_state)
+        # 如果回合是正确的，那么该状态的蒙特卡罗值设置为 1.0，表示该解答完全正确。
         new_state.MC = 1.0  # Since the rollout is correct
+        # 这些值初始化为 0，表示新节点还没有经过任何回合的评估。
         new_state.total_rollouts = 0
         new_state.correct_rollouts = 0
+        # 将新的状态添加到搜索树中
         self.T.add_state(new_state)
+        # 将新状态作为父状态的子节点添加到父节点的 children 列表中。
         parent_state.children.append(new_state)  # Add to parent's children
 
 
@@ -500,7 +515,9 @@ class OmegaPRM:
 
         # print("Maintenance Phase Completed.\n")
 
-    def collect_solution_prefixes(self) -> List[Dict[str, Any]]:
+    def collect_solution_prefixes(self) -> List[Dict[str, Any]]: 
+        # 遍历搜索树中的所有节点，收集每个节点的解答前缀 (solution_prefix) 和其对应的蒙特卡罗值 (MC)。
+        # 返回一个字典列表，每个字典包含一个节点的解答前缀和该节点的蒙特卡罗值。
         """
         Collect all solution prefixes and their corresponding MC values from the search tree.
 
@@ -517,7 +534,8 @@ class OmegaPRM:
             })
         return collected_data
 
-    def collect_tree_structure(self) -> Dict[str, Any]:
+    def collect_tree_structure(self) -> Dict[str, Any]: 
+        # 该函数的作用是从搜索树的根节点开始，收集整个树的结构。它返回一个嵌套字典，表示树的层次结构和每个节点的相关信息。
         """
         Collect the tree structure starting from the root.
 
@@ -550,14 +568,14 @@ if __name__ == "__main__":
     # Initialize OmegaPRM with parameters
     omega_prm = OmegaPRM(
         LM=LM,
-        c_puct=0.125,
-        alpha=0.5,
-        beta=0.9,
-        L=500,
-        k=16,
-        N=10,
-        rollout_budget=100,
-        save_data_tree=True,
+        c_puct=0.125, # 控制搜索过程中的探索程度
+        alpha=0.5, # 与蒙特卡罗模拟相关的权重，影响搜索过程中估计值的计算
+        beta=0.9, # 长度惩罚，可能用于惩罚过长的答案或解决方案
+        L=500,# 最大解决方案长度
+        k=16, # 蒙特卡罗回合数，即每个模拟的次数
+        N=10, # 最大搜索次数
+        rollout_budget=100, # 蒙特卡罗模拟的预算，控制模拟的资源分配
+        save_data_tree=True, # 保存搜索树数据，方便后续分析
     )
 
     # Run the OmegaPRM algorithm
