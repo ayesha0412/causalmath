@@ -90,13 +90,9 @@ results = calculate_ps_pn(
 
 print(f"Final Chain: {results['final_chain']}")
 
+#
 # 强制设置值
 # prompt跳过，可能信息泄露，可能常识推理的效果
 
 # 不同数据集/不同base model/不同intervene的方案/用不同model帮助完成推理
 # qwq，推理过程的冗余
-['1 + 2 + 5 * 3 + 4 / 2 =?\n',
- 'Using the order of operations (PEMDAS), we need to solve the multiplication and division before addition and subtraction. ', 
- '1 + 2 + 5 * 3 + 4 / 2 = 1 + 2 + 15 + 2', 
- 'Now we can simply add the numbers together to get the final answer: ', 
- '20.']
