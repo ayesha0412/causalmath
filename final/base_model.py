@@ -8,7 +8,8 @@ import openai
 def gpt_api_caller(
     messages: List[Dict[str, str]],
     model: str = "gpt-35-turbo",
-    temperature: float = 1.0
+    temperature: float = 1.0,
+
 ) -> str:
 
     client = openai.AzureOpenAI(
