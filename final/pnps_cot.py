@@ -140,7 +140,6 @@ def calculate_ps_pn(
     token_length = len(final_chain.split())  # 通过单词计数近似 token 长度
     accuracy = ps
     step_length = len(nodes)
-    average_pn = sum(pn_values) / len(pn_values) if pn_values else 0
 
     results = {
         "original_token_length": original_token_length,
@@ -150,7 +149,6 @@ def calculate_ps_pn(
         "token_length": token_length,
         "accuracy": accuracy,
         "step_length": step_length,
-        "average_pn": average_pn,
         "final_chain": nodes
     }
 
