@@ -1,12 +1,53 @@
 import pprint
 from typing import Dict, Any, List
 
-from base_model import gpt_api_caller
+# from base_model import gpt_api_caller
 from equivalent_ans import is_equivalent_answer
 
 import os, sys
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
+
+###############################################################################
+# Rollout / Equivalence-Check Counters
+###############################################################################
+rollout_metrics = {
+    "total_rollout_calls": 0,
+    "equiv_check_calls": 0,
+    "rollout_prompt_intervention_count": 0,
+    "rollout_direct_count": 0
+}
+
+
+def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
+    """
+    Wraps qwen_api_caller to count how many rollouts are made 
+    and whether they are prompt-intervention or direct rollouts.
+    """
+    # Increment total rollouts
+    rollout_metrics["total_rollout_calls"] += 1
+
+    # Count the rollout type
+    if do_type == 1:
+        rollout_metrics["rollout_prompt_intervention_count"] += 1
+    else:
+        rollout_metrics["rollout_direct_count"] += 1
+
+    # Call the actual LLM API
+    output = qwen_api_caller(message)
+    return output
+
+
+def counted_equiv_check(candidate: str, ground_truth: str) -> bool:
+    """
+    Wraps is_equivalent_answer to count how many times equivalence checks occur.
+    """
+    rollout_metrics["equiv_check_calls"] += 1
+    return is_equivalent_answer(candidate, ground_truth)
+
+###############################################################################
+# Core Functions
+###############################################################################
 
 def parse_nodes(text: str) -> List[str]:
     """
@@ -14,6 +55,7 @@ def parse_nodes(text: str) -> List[str]:
     """
     nodes = text.split('\n\n')
     return [node.strip() for node in nodes if node.strip()]
+
 
 def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
     """
@@ -31,7 +73,7 @@ def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
 
     if original_steps:
         final_answer = original_steps[-1]
-        original_ps = 1 if is_equivalent_answer(final_answer, ground_truth) else 0
+        original_ps = 1 if counted_equiv_check(final_answer, ground_truth) else 0
     else:
         final_answer = ""
         original_ps = 0
@@ -44,6 +86,7 @@ def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
     }
     return metrics
 
+
 def generate_replacement_step(
     query: str,
     context_steps: List[str],
@@ -52,7 +95,7 @@ def generate_replacement_step(
 ) -> str:
     """
     Generates a replacement step for the current_step based on do_type logic.
-    Incorporates the original `query` into the user content.
+    Incorporates the original query into the user content.
     """
     if do_type == 1:
         # Based on prompt intervention (skip current meaning)
@@ -76,7 +119,7 @@ def generate_replacement_step(
                 )
             }
         ]
-        replacement_text = gpt_api_caller(skip_message)
+        replacement_text = counted_rollout_call(do_type, skip_message)
     else:
         # Direct rollout with the query plus existing steps
         context_message = [
@@ -98,9 +141,10 @@ def generate_replacement_step(
                 )
             }
         ]
-        replacement_text = gpt_api_caller(context_message)
+        replacement_text = counted_rollout_call(do_type, context_message)
 
     return replacement_text
+
 
 def ensure_different_step(
     query: str,
@@ -112,13 +156,14 @@ def ensure_different_step(
 ) -> List[str]:
     """
     Ensures the first replacement step is different from the original step
-    by re-generating up to `alter_attempts` times if necessary.
+    by re-generating up to alter_attempts times if necessary.
     Returns a list of replacement steps.
     """
     for attempt in range(1, alter_attempts + 1):
         replacement_steps = parse_nodes(replacement_text)
 
-        if not replacement_steps or not is_equivalent_answer(replacement_steps[0], original_step):
+        # If no steps or the first new step is not equivalent to the original step, return
+        if not replacement_steps or not counted_equiv_check(replacement_steps[0], original_step):
             return replacement_steps
         else:
             # If the new step is still too similar, try regenerating
@@ -130,6 +175,7 @@ def ensure_different_step(
 
     return parse_nodes(replacement_text)
 
+
 def evaluate_replacement_step(
     query: str,
     context_steps: List[str],
@@ -138,7 +184,7 @@ def evaluate_replacement_step(
     reasoning_attempts: int
 ) -> float:
     """
-    Given a single candidate replacement step, attempts forward passes `reasoning_attempts` times.
+    Given a single candidate replacement step, attempts forward passes reasoning_attempts times.
     Returns the average correctness (average Y value).
     """
     y_values = []
@@ -163,19 +209,21 @@ def evaluate_replacement_step(
                 )
             }
         ]
-        evaluation_text = gpt_api_caller(eval_message)
+        # Treat these as direct rollouts (do_type=0)
+        evaluation_text = counted_rollout_call(0, eval_message)
         if not evaluation_text:
             # No generation; consider this a wrong answer
             y_values.append(0)
         else:
             eval_nodes = parse_nodes(evaluation_text)
             eval_final_answer = eval_nodes[-1] if eval_nodes else ""
-            is_correct = is_equivalent_answer(eval_final_answer, ground_truth)
+            is_correct = counted_equiv_check(eval_final_answer, ground_truth)
             y_values.append(1 if is_correct else 0)
 
     if len(y_values) == 0:
         return 0.0
     return sum(y_values) / len(y_values)
+
 
 def update_chain_if_needed(
     query: str,
@@ -243,7 +291,7 @@ def update_chain_if_needed(
                 )
             }
         ]
-        best_evaluation_text = gpt_api_caller(best_eval_message)
+        best_evaluation_text = counted_rollout_call(0, best_eval_message)
         best_eval_nodes = parse_nodes(best_evaluation_text)
 
         # Replace from current step onward
@@ -256,6 +304,7 @@ def update_chain_if_needed(
 
     return nodes, i, pn
 
+
 def calculate_ps_pn(
     query: str,
     response: str,
@@ -263,17 +312,21 @@ def calculate_ps_pn(
     threshold: float = 0.3,
     reasoning_attempts: int = 3,
     do_type: int = 0,
-    alter_attempts: int = 5
+    alter_attempts: int = 1
 ) -> Dict[str, Any]:
     """
     Main function that calculates:
     - PS(chain): Whether final answer is equivalent to ground_truth
     - PN values for each step that might be replaced
     - Token length, step length, etc.
-
-    'query' is the original question.
-    'response' is the model's chain-of-thought steps (without the question).
+    - Also collects counts of rollouts and equivalence checks.
     """
+    # Reset metrics counters each time we call
+    rollout_metrics["total_rollout_calls"] = 0
+    rollout_metrics["equiv_check_calls"] = 0
+    rollout_metrics["rollout_prompt_intervention_count"] = 0
+    rollout_metrics["rollout_direct_count"] = 0
+
     # 1. Get original metrics from the chain-of-thought
     original_metrics = get_original_metrics(response, ground_truth)
 
@@ -282,7 +335,7 @@ def calculate_ps_pn(
     pprint.pprint(nodes)
 
     # 3. Intervene on each node
-    i = 0  # If the response does not include the question, start from the very first step
+    i = 0
     pn_values = []
     while i < len(nodes):
         nodes, i, pn = update_chain_if_needed(
@@ -299,7 +352,7 @@ def calculate_ps_pn(
 
     # 4. After all possible interventions, compute final metrics
     final_answer = nodes[-1] if nodes else ""
-    ps = 1 if is_equivalent_answer(final_answer, ground_truth) else 0
+    ps = 1 if counted_equiv_check(final_answer, ground_truth) else 0
     final_chain = '\n\n'.join(nodes)
 
     # Approximate token length by counting words
@@ -311,17 +364,24 @@ def calculate_ps_pn(
         "original_token_length": original_metrics["original_token_length"],
         "original_accuracy": original_metrics["original_accuracy"],
         "original_step_length": original_metrics["original_step_length"],
-        "avg_PN(steps)": sum(pn_values)/len(pn_values),
-        "max_PN(steps)": max(pn_values),
-        "min_PN(steps)": min(pn_values),
+        "avg_PN(steps)": sum(pn_values)/len(pn_values) if pn_values else 0.0,
+        "max_PN(steps)": max(pn_values) if pn_values else 0.0,
+        "min_PN(steps)": min(pn_values) if pn_values else 0.0,
         "PS(chain)": ps,
         "token_length": token_length,
         "accuracy": ps,  # final PS is the final accuracy
         "step_length": step_length,
-        "final_chain": nodes
+        "final_chain": nodes,
+
+        # New counters
+        "total_rollout_calls": rollout_metrics["total_rollout_calls"],
+        "equiv_check_calls": rollout_metrics["equiv_check_calls"],
+        "rollout_prompt_intervention_count": rollout_metrics["rollout_prompt_intervention_count"],
+        "rollout_direct_count": rollout_metrics["rollout_direct_count"],
     }
 
     return results
+
 
 # -----------------------------------------------------------------------------
 # Example usage:
