@@ -1,12 +1,12 @@
 import pprint
 from typing import Dict, Any, List
 
-# from base_model import gpt_api_caller, llm_predict_gpt35
+from base_model import gpt_api_caller
 from equivalent_ans import is_equivalent_answer
 
 import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
 
 def parse_nodes(text: str) -> List[str]:
     """
@@ -311,6 +311,9 @@ def calculate_ps_pn(
         "original_token_length": original_metrics["original_token_length"],
         "original_accuracy": original_metrics["original_accuracy"],
         "original_step_length": original_metrics["original_step_length"],
+        "avg_PN(steps)": sum(pn_values)/len(pn_values),
+        "max_PN(steps)": max(pn_values),
+        "min_PN(steps)": min(pn_values),
         "PS(chain)": ps,
         "token_length": token_length,
         "accuracy": ps,  # final PS is the final accuracy

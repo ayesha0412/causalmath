@@ -2,8 +2,10 @@
 
 import re
 import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lightllm_api.llm_api import gpt_api_caller
+
+from base_model import gpt_api_caller
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# from lightllm_api.llm_api import gpt_api_caller
 
 def is_equivalent_answer(final_answer, ground_truth):
     prompt = f"""
