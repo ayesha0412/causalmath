@@ -1,4 +1,9 @@
-import openai
+# import openai
+
+import re
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from lightllm_api.llm_api import gpt_api_caller
 
 def is_equivalent_answer(final_answer, ground_truth):
     prompt = f"""
@@ -9,19 +14,21 @@ def is_equivalent_answer(final_answer, ground_truth):
     """ 
     print('进行答案对比：')
     print("ground_truth:",ground_truth,"final_answer:",final_answer)
-    client = openai.AzureOpenAI(
-        azure_endpoint="https://feng-cloud-openai.openai.azure.com/",
-        api_key="e51a662bf2934ff585b9e53b21b7f6c2",
-        api_version="2024-02-15-preview"
-    )
+    # client = openai.AzureOpenAI(
+    #     azure_endpoint="https://feng-cloud-openai.openai.azure.com/",
+    #     api_key="e51a662bf2934ff585b9e53b21b7f6c2",
+    #     api_version="2024-02-15-preview"
+    # )
 
-    response = client.chat.completions.create(
-                model="gpt-35-turbo",
-                messages=[{"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt}],
-                temperature=0
-            )
+    # response = client.chat.completions.create(
+    #             model="gpt-35-turbo",
+    #             messages=[{"role": "system", "content": "You are a helpful assistant."},
+    #                 {"role": "user", "content": prompt}],
+    #             temperature=0
+    #         )
     
-    answer = response.choices[0].message.content.strip().lower()
+    # answer = response.choices[0].message.content.strip().lower()
+    answer = gpt_api_caller([{"role": "user", "content": prompt}])
     print('是否回答正确:',answer)
-    return "yes" in answer
+    pattern = r"^(yes|no)$"
+    return bool(re.match(pattern, answer.strip(), re.IGNORECASE))
