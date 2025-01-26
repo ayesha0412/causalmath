@@ -1,12 +1,10 @@
 import pprint
 from typing import Dict, Any, List
 
-# from base_model import gpt_api_caller
 from equivalent_ans import is_equivalent_answer
 
-import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
+from test_api import query_api
+
 
 ###############################################################################
 # Rollout / Equivalence-Check Counters
@@ -29,12 +27,15 @@ def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
 
     # Count the rollout type
     if do_type == 1:
+        print("rollout的类型是:prompt-intervention")
         rollout_metrics["rollout_prompt_intervention_count"] += 1
     else:
+        print("rollout的类型是:direct")
         rollout_metrics["rollout_direct_count"] += 1
 
     # Call the actual LLM API
-    output = qwen_api_caller(message)
+    output = query_api(message)
+    print("rollout的新节点是:",output)
     return output
 
 
@@ -73,7 +74,9 @@ def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
 
     if original_steps:
         final_answer = original_steps[-1]
-        original_ps = 1 if counted_equiv_check(final_answer, ground_truth) else 0
+        flag = counted_equiv_check(final_answer, ground_truth)
+        print("判断原cot推理结果是否正确:",flag)
+        original_ps = 1 if flag else 0
     else:
         final_answer = ""
         original_ps = 0
@@ -163,13 +166,17 @@ def ensure_different_step(
         replacement_steps = parse_nodes(replacement_text)
 
         # If no steps or the first new step is not equivalent to the original step, return
-        if not replacement_steps or not counted_equiv_check(replacement_steps[0], original_step):
+        flag = counted_equiv_check(replacement_steps[0], original_step)
+        if not replacement_steps or not flag:
+            print("新rollout的节点和原先不一致")
             return replacement_steps
         else:
             # If the new step is still too similar, try regenerating
+            print("新rollout的节点和原先一致,重新生成")
             replacement_text = generate_replacement_step(query, context_steps, original_step, do_type)
 
             if attempt == alter_attempts:
+                print("******达到最大尝试次数****")
                 print(f"Reached max attempts ({alter_attempts}); replacement step is still similar.")
                 return replacement_steps
 
@@ -218,6 +225,7 @@ def evaluate_replacement_step(
             eval_nodes = parse_nodes(evaluation_text)
             eval_final_answer = eval_nodes[-1] if eval_nodes else ""
             is_correct = counted_equiv_check(eval_final_answer, ground_truth)
+            print("新rollout的节点得到的最终答案是否正确:",is_correct)
             y_values.append(1 if is_correct else 0)
 
     if len(y_values) == 0:
@@ -353,6 +361,7 @@ def calculate_ps_pn(
     # 4. After all possible interventions, compute final metrics
     final_answer = nodes[-1] if nodes else ""
     ps = 1 if counted_equiv_check(final_answer, ground_truth) else 0
+    print("最终的cot是否正确(PS):",ps)
     final_chain = '\n\n'.join(nodes)
 
     # Approximate token length by counting words
@@ -385,26 +394,45 @@ def calculate_ps_pn(
 
 # -----------------------------------------------------------------------------
 # Example usage:
+# if __name__ == "__main__":
+#     example_query = "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
+#     # The chain-of-thought (response) below excludes the question as its first node.
+#     example_llm_response = """Alright, let's see. So, Natalia sold clips to 48 of her friends in April, and then in May, she sold half as many clips. I need to find out how many clips she sold altogether in these two months.\n\n
+
+# First, in April, she sold 48 clips. That's straightforward. Now, in May, she sold half as many as in April. So, half of 48. Let's think, half of 40 is 20, and half of 8 is 4, so half of 48 is 24. So, in May, she sold 24 clips.\n\n
+
+# To find the total, I need to add the clips sold in April and May together. So, 48 plus 24. Let's see, 48 plus 20 is 68, and then plus 4 more is 72. So, altogether, she sold 72 clips in April and May.\n\n
+
+# Wait, is there another way to look at this? Maybe I can think of it as April being one part and May being half a part, so together it's one and a half parts. If one part is 48, then one and a half parts would be 48 plus 24, which again is 72. Yeah, that matches what I got before.\n\n
+
+# I don't think I'm missing anything here. It seems pretty straightforward. She sold 48 in April, half that in May, which is 24, and together that's 72 clips.
+
+#     """
+#     ground_truth = "72"
+
+#     results = calculate_ps_pn(
+#         query=example_query,
+#         response=example_llm_response,
+#         ground_truth=ground_truth
+#     )
+
+#     print("\nFinal chain of steps:")
+#     pprint.pprint(results["final_chain"])
+
+#     metrics = {k: v for k, v in results.items() if k != "final_chain"}
+#     print("\nMetrics:")
+#     pprint.pprint(metrics)
 if __name__ == "__main__":
     example_query = "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
-    # The chain-of-thought (response) below excludes the question as its first node.
-    example_llm_response = """Alright, let's see. So, Natalia sold clips to 48 of her friends in April, and then in May, she sold half as many clips. I need to find out how many clips she sold altogether in these two months.\n\n
-
-First, in April, she sold 48 clips. That's straightforward. Now, in May, she sold half as many as in April. So, half of 48. Let's think, half of 40 is 20, and half of 8 is 4, so half of 48 is 24. So, in May, she sold 24 clips.\n\n
-
-To find the total, I need to add the clips sold in April and May together. So, 48 plus 24. Let's see, 48 plus 20 is 68, and then plus 4 more is 72. So, altogether, she sold 72 clips in April and May.\n\n
-
-Wait, is there another way to look at this? Maybe I can think of it as April being one part and May being half a part, so together it's one and a half parts. If one part is 48, then one and a half parts would be 48 plus 24, which again is 72. Yeah, that matches what I got before.\n\n
-
-I don't think I'm missing anything here. It seems pretty straightforward. She sold 48 in April, half that in May, which is 24, and together that's 72 clips.
-
-    """
     ground_truth = "72"
-
+    example_llm_response = query_api([{"role": "user", "content": example_query}])
+    print("\nexample_llm_response:",example_llm_response)
     results = calculate_ps_pn(
         query=example_query,
         response=example_llm_response,
-        ground_truth=ground_truth
+        ground_truth=ground_truth,
+        alter_attempts=3,
+        do_type=1,
     )
 
     print("\nFinal chain of steps:")
