@@ -1,7 +1,7 @@
 import pprint
 from typing import Dict, Any, List
 
-from equivalent_ans import is_equivalent_answer
+from equivalent_ans import is_equivalent_answer, is_equivalent_step
 
 from test_api import query_api
 
@@ -39,12 +39,16 @@ def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
     return output
 
 
-def counted_equiv_check(candidate: str, ground_truth: str) -> bool:
+def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -> bool:
     """
     Wraps is_equivalent_answer to count how many times equivalence checks occur.
     """
     rollout_metrics["equiv_check_calls"] += 1
-    return is_equivalent_answer(candidate, ground_truth)
+
+    if check_answer: # True代表判断结果是否正确
+        return is_equivalent_answer(candidate, ground_truth)
+    # False代表判断两个step意义是否一致
+    return is_equivalent_step(candidate, ground_truth)
 
 ###############################################################################
 # Core Functions
@@ -74,7 +78,7 @@ def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
 
     if original_steps:
         final_answer = original_steps[-1]
-        flag = counted_equiv_check(final_answer, ground_truth)
+        flag = counted_equiv_check(final_answer, ground_truth,check_answer=True)
         print("判断原cot推理结果是否正确:",flag)
         original_ps = 1 if flag else 0
     else:
@@ -224,7 +228,7 @@ def evaluate_replacement_step(
         else:
             eval_nodes = parse_nodes(evaluation_text)
             eval_final_answer = eval_nodes[-1] if eval_nodes else ""
-            is_correct = counted_equiv_check(eval_final_answer, ground_truth)
+            is_correct = counted_equiv_check(eval_final_answer, ground_truth,check_answer=True)
             print("新rollout的节点得到的最终答案是否正确:",is_correct)
             y_values.append(1 if is_correct else 0)
 
@@ -320,7 +324,7 @@ def calculate_ps_pn(
     threshold: float = 0.3,
     reasoning_attempts: int = 3,
     do_type: int = 0,
-    alter_attempts: int = 1
+    alter_attempts: int = 5
 ) -> Dict[str, Any]:
     """
     Main function that calculates:
@@ -360,7 +364,7 @@ def calculate_ps_pn(
 
     # 4. After all possible interventions, compute final metrics
     final_answer = nodes[-1] if nodes else ""
-    ps = 1 if counted_equiv_check(final_answer, ground_truth) else 0
+    ps = 1 if counted_equiv_check(final_answer, ground_truth,check_answer=True) else 0
     print("最终的cot是否正确(PS):",ps)
     final_chain = '\n\n'.join(nodes)
 
