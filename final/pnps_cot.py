@@ -182,7 +182,8 @@ def ensure_different_step(
             if attempt == alter_attempts:
                 print("******达到最大尝试次数****")
                 print(f"Reached max attempts ({alter_attempts}); replacement step is still similar.")
-                return replacement_steps
+                print("无法得到不同步骤,设置pn=1")
+                return None
 
     return parse_nodes(replacement_text)
 
@@ -266,19 +267,22 @@ def update_chain_if_needed(
     replacement_steps = ensure_different_step(
         query, replacement_text, current_step, context_steps, alter_attempts, do_type
     )
-    print("Generated replacement steps:", replacement_steps)
-
-    # Evaluate the replacement step over multiple forward passes
-    candidate_step = replacement_steps[0] if replacement_steps else ""
-    average_y = evaluate_replacement_step(
-        query,
-        context_steps,
-        candidate_step,
-        ground_truth,
-        reasoning_attempts
-    )
-    pn = 1 - average_y
-    print(f"PN value for step {i}: {pn}")
+    if not replacement_steps:
+        pn = 1.0
+        candidate_step = current_step
+        print(f"PN value for step {i}: {pn}")
+    else:
+        # Evaluate the replacement step over multiple forward passes
+        candidate_step = replacement_steps[0] if replacement_steps else ""
+        average_y = evaluate_replacement_step(
+            query,
+            context_steps,
+            candidate_step,
+            ground_truth,
+            reasoning_attempts
+        )
+        pn = 1 - average_y
+        print(f"PN value for step {i}: {pn}")
 
     # If PN is below threshold, we intervene (replace) from this step onward
     if pn < threshold:
