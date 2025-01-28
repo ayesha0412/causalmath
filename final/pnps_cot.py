@@ -2,9 +2,10 @@ import pprint
 from typing import Dict, Any, List
 
 from equivalent_ans import is_equivalent_answer, is_equivalent_step
+from base_model import  gpt_api_caller
+# from test_api import query_api
 
-from test_api import query_api
-
+llm_api = gpt_api_caller # 替换为你的LLM调用函数
 
 ###############################################################################
 # Rollout / Equivalence-Check Counters
@@ -34,7 +35,7 @@ def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
         rollout_metrics["rollout_direct_count"] += 1
 
     # Call the actual LLM API
-    output = query_api(message)
+    output = llm_api(message)
     print("rollout的新节点是:",output)
     return output
 
@@ -182,7 +183,6 @@ def ensure_different_step(
             if attempt == alter_attempts:
                 print("******达到最大尝试次数****")
                 print(f"Reached max attempts ({alter_attempts}); replacement step is still similar.")
-                print("无法得到不同步骤,设置pn=1")
                 return None
 
     return parse_nodes(replacement_text)
@@ -268,9 +268,11 @@ def update_chain_if_needed(
         query, replacement_text, current_step, context_steps, alter_attempts, do_type
     )
     if not replacement_steps:
-        pn = 1.0
-        candidate_step = current_step
-        print(f"PN value for step {i}: {pn}")
+        print('跳过节点,pn为None')
+        print(f"Skipping PN estimation and further processing for step {i}")
+        # Skip this node and move to the next one without evaluating its PN
+        i += 1
+        return nodes, i, None  # Returning None to indicate this step is skipped
     else:
         # Evaluate the replacement step over multiple forward passes
         candidate_step = replacement_steps[0] if replacement_steps else ""
@@ -364,7 +366,9 @@ def calculate_ps_pn(
             do_type=do_type,
             alter_attempts=alter_attempts
         )
-        pn_values.append(pn)
+        # Only append pn if it's not None
+        if pn is not None:
+            pn_values.append(pn)
 
     # 4. After all possible interventions, compute final metrics
     final_answer = nodes[-1] if nodes else ""
@@ -381,9 +385,9 @@ def calculate_ps_pn(
         "original_token_length": original_metrics["original_token_length"],
         "original_accuracy": original_metrics["original_accuracy"],
         "original_step_length": original_metrics["original_step_length"],
-        "avg_PN(steps)": sum(pn_values)/len(pn_values) if pn_values else 0.0,
-        "max_PN(steps)": max(pn_values) if pn_values else 0.0,
-        "min_PN(steps)": min(pn_values) if pn_values else 0.0,
+        "avg_PN(steps)": sum(pn_values)/len(pn_values) if pn_values else None,
+        "max_PN(steps)": max(pn_values) if pn_values else None,
+        "min_PN(steps)": min(pn_values) if pn_values else None,
         "PS(chain)": ps,
         "token_length": token_length,
         "accuracy": ps,  # final PS is the final accuracy
@@ -431,9 +435,10 @@ def calculate_ps_pn(
 #     print("\nMetrics:")
 #     pprint.pprint(metrics)
 if __name__ == "__main__":
+    print("\nRunning example...")
     example_query = "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
     ground_truth = "72"
-    example_llm_response = query_api([{"role": "user", "content": example_query}])
+    example_llm_response = llm_api([{"role": "user", "content": example_query}])
     print("\nexample_llm_response:",example_llm_response)
     results = calculate_ps_pn(
         query=example_query,

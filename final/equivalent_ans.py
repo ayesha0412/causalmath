@@ -1,10 +1,12 @@
 import re
 import os, sys
 
-# from base_model import gpt_api_caller
+from base_model import gpt_api_caller
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from test_api import query_api
+# from test_api import query_api
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
+
+llm_api = gpt_api_caller # 替换为你的LLM调用函数
 
 def is_equivalent_step(final_answer, ground_truth): # 两步的含义是否一致
     prompt = f"""
@@ -30,7 +32,7 @@ def is_equivalent_step(final_answer, ground_truth): # 两步的含义是否一�
     
     # answer = response.choices[0].message.content.strip().lower()
 
-    answer = query_api([{"role": "user", "content": prompt}])
+    answer =llm_api([{"role": "user", "content": prompt}])
         # Define regex patterns for "yes" and "no"
     yes_pattern = r"\byes\b"
     no_pattern = r"\bno\b"
@@ -66,7 +68,7 @@ def is_equivalent_answer(final_answer, ground_truth): # 结果是否等价
     
     # answer = response.choices[0].message.content.strip().lower()
     
-    answer = query_api([{"role": "user", "content": prompt}])
+    answer = llm_api([{"role": "user", "content": prompt}])
         # Define regex patterns for "yes" and "no"
     yes_pattern = r"\byes\b"
     no_pattern = r"\bno\b"
