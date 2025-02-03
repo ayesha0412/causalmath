@@ -111,9 +111,9 @@ def generate_replacement_step(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Please continue reasoning to solve the problem "
-                    "without repeating previous steps. Provide only mathematical expressions, "
-                    "no text explanations or summaries. Ensure the next output node does not match "
+                    "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
+                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
+                    "and without any additional summaries or explanations. Ensure the next output node does not match "
                     f"the meaning of:\n{current_step}"
                 )
             },
@@ -134,9 +134,9 @@ def generate_replacement_step(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Please continue reasoning to solve the problem "
-                    "without repeating previous steps. Provide only mathematical expressions, "
-                    "no text explanations or summaries."
+                    "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
+                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
+                    "and without any additional summaries or explanations."
                 )
             },
             {
@@ -207,9 +207,9 @@ def evaluate_replacement_step(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Please continue reasoning to solve the problem "
-                    "without repeating previous steps. Provide only mathematical expressions, "
-                    "no text explanations or summaries."
+                "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
+                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
+                    "and without any additional summaries or explanations."
                 )
             },
             {
@@ -295,9 +295,9 @@ def update_chain_if_needed(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Please continue reasoning to solve the problem "
-                    "without repeating previous steps. Provide only mathematical expressions, "
-                    "no text explanations or summaries."
+                    "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
+                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
+                    "and without any additional summaries or explanations."
                 )
             },
             {
