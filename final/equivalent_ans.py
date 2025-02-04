@@ -1,12 +1,12 @@
 import re
 import os, sys
 
-from base_model import gpt_api_caller
+# from base_model import gpt_api_caller
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# from test_api import query_api
+from test_api import query_api
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 
-llm_api = gpt_api_caller # 替换为你的LLM调用函数
+llm_api = query_api # 替换为你的LLM调用函数
 
 def is_equivalent_step(final_answer, ground_truth): # 两步的含义是否一致
     prompt = f"""
@@ -70,6 +70,31 @@ def is_equivalent_answer(final_answer, ground_truth): # 结果是否等价
     
     answer = llm_api([{"role": "user", "content": prompt}])
         # Define regex patterns for "yes" and "no"
+    yes_pattern = r"\byes\b"
+    no_pattern = r"\bno\b"
+
+    # Check if "yes" or "no" is in the answer
+    if re.search(yes_pattern, answer, re.IGNORECASE):
+        return True
+    elif re.search(no_pattern, answer, re.IGNORECASE):
+        return False
+    else:
+        return False
+    
+# 用于常识推理判断最后是否推理正确
+def is_equivalent_reasoning(statement1, statement2): 
+    prompt = f"""
+    You are an intelligent assistant. Determine if the following two statements convey the same reasoning and conclusion:
+    Statement 1: {statement1}
+    Statement 2: {statement2}
+    Respond with "yes" if both statements convey the same reasoning or conclusion. Respond with "no" if they convey different reasoning or conclusions.
+    """ 
+    print("Statement 1:", statement1, "Statement 2:", statement2)
+
+    # Use your LLM API to get the response
+    answer = llm_api([{"role": "user", "content": prompt}])
+    
+    # Define regex patterns for "yes" and "no"
     yes_pattern = r"\byes\b"
     no_pattern = r"\bno\b"
 

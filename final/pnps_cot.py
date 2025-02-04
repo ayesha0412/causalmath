@@ -1,11 +1,11 @@
 import pprint
 from typing import Dict, Any, List
 
-from equivalent_ans import is_equivalent_answer, is_equivalent_step
-from base_model import  gpt_api_caller
-# from test_api import query_api
+from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning, is_equivalent_step
+# from base_model import  gpt_api_caller
+from test_api import query_api
 
-llm_api = gpt_api_caller # 替换为你的LLM调用函数
+llm_api = query_api # 替换为你的LLM调用函数
 
 ###############################################################################
 # Rollout / Equivalence-Check Counters
@@ -47,7 +47,10 @@ def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -
     rollout_metrics["equiv_check_calls"] += 1
 
     if check_answer: # True代表判断结果是否正确
-        return is_equivalent_answer(candidate, ground_truth)
+        # math
+        # return is_equivalent_answer(candidate, ground_truth)
+        # 常识
+        return is_equivalent_reasoning(candidate, ground_truth)
     # False代表判断两个step意义是否一致
     return is_equivalent_step(candidate, ground_truth)
 
@@ -113,8 +116,10 @@ def generate_replacement_step(
                 "content": (
                     "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
                     "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
-                    "and without any additional summaries or explanations. Ensure the next output node does not match "
+                    "and without any additional summaries or explanations. Avoid using summarizing words like 'so','Thus' or repeating the final result."
+                    "Ensure the next output node does not match "
                     f"the meaning of:\n{current_step}"
+                    "Avoid repeating the final result directly when the calculation is already clear."
                 )
             },
             {
@@ -134,9 +139,9 @@ def generate_replacement_step(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
-                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
-                    "and without any additional summaries or explanations."
+                    "You are a helpful assistant. Continue solving the problem using mathematical expressions only, without repeating previous steps. "
+            "Provide the final answer once, directly linked to the preceding reasoning, without additional summaries or explanations. "
+            "Avoid using summarizing words such as 'so' or 'thus,' and refrain from repeating the final result when the calculation is already clear."
                 )
             },
             {
@@ -207,9 +212,9 @@ def evaluate_replacement_step(
             {
                 "role": "system",
                 "content": (
-                "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
-                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
-                    "and without any additional summaries or explanations."
+                        "You are a helpful assistant. Continue solving the problem using mathematical expressions only, without repeating previous steps. "
+            "Provide the final answer once, directly linked to the preceding reasoning, without additional summaries or explanations. "
+            "Avoid using summarizing words such as 'so' or 'thus,' and refrain from repeating the final result when the calculation is already clear."
                 )
             },
             {
@@ -295,9 +300,9 @@ def update_chain_if_needed(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
-                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
-                    "and without any additional summaries or explanations."
+            "You are a helpful assistant. Continue solving the problem using mathematical expressions only, without repeating previous steps. "
+            "Provide the final answer once, directly linked to the preceding reasoning, without additional summaries or explanations. "
+            "Avoid using summarizing words such as 'so' or 'thus,' and refrain from repeating the final result when the calculation is already clear."
                 )
             },
             {
@@ -434,10 +439,36 @@ def calculate_ps_pn(
 #     metrics = {k: v for k, v in results.items() if k != "final_chain"}
 #     print("\nMetrics:")
 #     pprint.pprint(metrics)
+
+# math测试
+
+# if __name__ == "__main__":
+#     print("\nRunning example...")
+#     example_query = "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
+#     ground_truth = "72"
+#     example_llm_response = llm_api([{"role": "user", "content": example_query}])
+#     print("\nexample_llm_response:",example_llm_response)
+#     results = calculate_ps_pn(
+#         query=example_query,
+#         response=example_llm_response,
+#         ground_truth=ground_truth,
+#         alter_attempts=3,
+#         do_type=1,
+#     )
+
+#     print("\nFinal chain of steps:")
+#     pprint.pprint(results["final_chain"])
+
+#     metrics = {k: v for k, v in results.items() if k != "final_chain"}
+#     print("\nMetrics:")
+#     pprint.pprint(metrics)
+
+# 常识测试
+
 if __name__ == "__main__":
     print("\nRunning example...")
-    example_query = "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
-    ground_truth = "72"
+    example_query = "What is the best way to begin going into trance?\nOptions:\n  A. religious experience\n  B. closed eyes\n  C. loss of control\n  D. sleep\n  E. hallucination\nPlease select the most appropriate answer and respond with the whole reasoning process together with the corresponding letter (A, B, C, D, or E)."
+    ground_truth = "Answer: B"
     example_llm_response = llm_api([{"role": "user", "content": example_query}])
     print("\nexample_llm_response:",example_llm_response)
     results = calculate_ps_pn(
