@@ -1,11 +1,14 @@
 import pprint
 from typing import Dict, Any, List
-
-from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning, is_equivalent_step
+from prompts import math_prompt,common_prompt
+from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
 # from base_model import  gpt_api_caller
 from test_api import query_api
 
 llm_api = query_api # 替换为你的LLM调用函数
+# total_prompt = math_prompt # math
+total_prompt = common_prompt # 常识
+
 
 ###############################################################################
 # Rollout / Equivalence-Check Counters
@@ -50,7 +53,8 @@ def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -
         # math
         # return is_equivalent_answer(candidate, ground_truth)
         # 常识
-        return is_equivalent_reasoning(candidate, ground_truth)
+        # return is_equivalent_reasoning(candidate, ground_truth)
+        return is_equivalent_reasoning_re(candidate, ground_truth)
     # False代表判断两个step意义是否一致
     return is_equivalent_step(candidate, ground_truth)
 
@@ -114,9 +118,7 @@ def generate_replacement_step(
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful assistant. Continue solving the problem with mathematical expressions only, without repeating previous steps. "
-                    "Provide the final answer once, ensuring it is directly connected to the preceding reasoning "
-                    "and without any additional summaries or explanations. Avoid using summarizing words like 'so','Thus' or repeating the final result."
+                    total_prompt+
                     "Ensure the next output node does not match "
                     f"the meaning of:\n{current_step}"
                     "Avoid repeating the final result directly when the calculation is already clear."
@@ -138,11 +140,7 @@ def generate_replacement_step(
         context_message = [
             {
                 "role": "system",
-                "content": (
-                    "You are a helpful assistant. Continue solving the problem using mathematical expressions only, without repeating previous steps. "
-            "Provide the final answer once, directly linked to the preceding reasoning, without additional summaries or explanations. "
-            "Avoid using summarizing words such as 'so' or 'thus,' and refrain from repeating the final result when the calculation is already clear."
-                )
+                "content": total_prompt
             },
             {
                 "role": "user",
@@ -211,11 +209,7 @@ def evaluate_replacement_step(
         eval_message = [
             {
                 "role": "system",
-                "content": (
-                        "You are a helpful assistant. Continue solving the problem using mathematical expressions only, without repeating previous steps. "
-            "Provide the final answer once, directly linked to the preceding reasoning, without additional summaries or explanations. "
-            "Avoid using summarizing words such as 'so' or 'thus,' and refrain from repeating the final result when the calculation is already clear."
-                )
+                "content": total_prompt
             },
             {
                 "role": "user",
@@ -299,11 +293,7 @@ def update_chain_if_needed(
         best_eval_message = [
             {
                 "role": "system",
-                "content": (
-            "You are a helpful assistant. Continue solving the problem using mathematical expressions only, without repeating previous steps. "
-            "Provide the final answer once, directly linked to the preceding reasoning, without additional summaries or explanations. "
-            "Avoid using summarizing words such as 'so' or 'thus,' and refrain from repeating the final result when the calculation is already clear."
-                )
+                "content": total_prompt
             },
             {
                 "role": "user",

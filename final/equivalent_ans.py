@@ -83,12 +83,11 @@ def is_equivalent_answer(final_answer, ground_truth): # 结果是否等价
     
 # 用于常识推理判断最后是否推理正确
 def is_equivalent_reasoning(statement1, statement2): 
-    prompt = f"""
-    You are an intelligent assistant. Determine if the following two statements convey the same reasoning and conclusion:
-    Statement 1: {statement1}
-    Statement 2: {statement2}
-    Respond with "yes" if both statements convey the same reasoning or conclusion. Respond with "no" if they convey different reasoning or conclusions.
-    """ 
+    prompt = f"""You are an intelligent assistant. Determine whether the following two statements contain the same option letter:
+Statement 1: {statement1}
+Statement 2: {statement2}
+Respond with ‘yes’ if both statements contain the same option letter, or ‘no’ if they contain different option letters."""
+
     print("Statement 1:", statement1, "Statement 2:", statement2)
 
     # Use your LLM API to get the response
@@ -104,4 +103,21 @@ def is_equivalent_reasoning(statement1, statement2):
     elif re.search(no_pattern, answer, re.IGNORECASE):
         return False
     else:
+        return False
+
+
+# 常识-正则
+def is_equivalent_reasoning_re(statement1, statement2): 
+    # Define regex pattern to match option letters (e.g., A, B, C, D)
+    option_pattern = r"\b([A-D])\b"
+
+    # Extract option letters from both statements
+    match1 = re.search(option_pattern, statement1)
+    match2 = re.search(option_pattern, statement2)
+
+    # If both statements contain an option letter, compare them
+    if match1 and match2:
+        return match1.group(1) == match2.group(1)
+    else:
+        # If no option letter is found in either statement, return False
         return False
