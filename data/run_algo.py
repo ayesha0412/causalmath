@@ -1,75 +1,133 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import argparse
 import json
 import multiprocessing as mp
-import sys
 import os
+import sys
+from functools import partial
 
 # Ensure we can import the calculate_ps_pn function (adjust the path as needed)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from final.pnps_cot import calculate_ps_pn  # Adjust this import if needed
 
-# If your code is in a module, e.g. "my_chain_metrics.py":
-# from my_chain_metrics import calculate_ps_pn
 
-# Otherwise, if the code with calculate_ps_pn(...) is in the same directory, import directly.
-from final.pnps_cot import calculate_ps_pn  # <-- EDIT to match your actual import
-
-##########################################
-# Worker function to compute metrics     #
-##########################################
-def get_metrics_for_line(json_line: str) -> dict:
+def extract_field(data: dict, possible_keys: list) -> str:
     """
-    1) Parse the JSON line.
-    2) Extract 'question' (query), 'qwq' (the chain-of-thought response),
-       and 'solution' (ground truth).
-    3) Call calculate_ps_pn(...) to compute metrics.
-    4) Append the metrics to the record and return it as a dict.
+    Attempts to extract a field from the JSON record using a list of possible keys.
+    
+    1. First, try to find an exact match.
+    2. If not found, search keys for a substring match (case insensitive).
+    3. Return an empty string if nothing is found.
+    """
+    # Try exact match
+    for key in possible_keys:
+        if key in data and data[key]:
+            return data[key]
+    
+    # Fallback: substring matching (case insensitive)
+    for key, value in data.items():
+        for candidate in possible_keys:
+            if candidate.lower() in key.lower() and value:
+                return value
+
+    return ""
+
+
+def get_metrics_for_line(json_line: str, prompt_based: bool) -> dict:
+    """
+    Parse a JSON line, extract relevant fields (using a list of candidate keys),
+    compute metrics with calculate_ps_pn, and append the results to the record.
+    
+    Parameters:
+        json_line (str): A single line from a JSONL file.
+        prompt_based (bool): If True, use prompt-based intervention; otherwise, use direct rollouts.
+    
+    Returns:
+        dict: The original record updated with a "metrics" field.
     """
     data = json.loads(json_line.strip())
 
-    # Extract fields from the JSON record
-    question = data.get("question", "")
-    model_cot = data.get("qwq_answer", "")       # chain-of-thought / response
-    ground_truth = data.get("answer", "")
+    # Try different possible keys for each field.
+    question = extract_field(data, ["question", "problem"])
+    model_cot = extract_field(data, ["gpt4o_answer", "qwq_answer", "qwen_answer"])
+    ground_truth = extract_field(data, ["answer", "solution"])
 
-    # Compute metrics (adjust the parameters as you like)
+    # Pass the boolean flag to calculate_ps_pn by converting it into the expected type
     results = calculate_ps_pn(
         query=question,
         response=model_cot,
         ground_truth=ground_truth,
-        threshold=0.3,         # PN threshold
-        reasoning_attempts=3,  # forward-passes for evaluation
-        do_type=0,             # direct rollouts or prompt intervention
-        alter_attempts=3       # how many times to try altering a step
+        threshold=0.3,           # PN threshold
+        reasoning_attempts=3,    # forward-passes for evaluation
+        do_type=1 if prompt_based else 0,  # Use prompt-based (1) or direct rollout (0)
+        alter_attempts=3         # How many times to try altering a step
     )
 
-    # Append the metrics to the JSON record
-    # e.g., store them under "metrics"
+    # Append the computed metrics to the data record.
     data["metrics"] = results
-
     return data
 
 
-########################################
-# Main Script with Pool for batching   #
-########################################
+def parse_args():
+    """
+    Parse command-line arguments.
+    """
+    parser = argparse.ArgumentParser(
+        description="Compute chain-of-thought metrics from a JSONL file."
+    )
+    parser.add_argument(
+        "--input_file", "-i",
+        type=str,
+        required=True,
+        help="Path to the input JSONL file."
+    )
+    parser.add_argument(
+        "--output_file", "-o",
+        type=str,
+        required=True,
+        help="Path to the output JSONL file."
+    )
+    parser.add_argument(
+        "--batch_size", "-b",
+        type=int,
+        default=20,
+        help="Batch size for processing lines. Default is 20."
+    )
+    parser.add_argument(
+        "--lines_processed", "-l",
+        type=int,
+        default=0,
+        help="Number of lines to skip (already processed). Default is 0."
+    )
+    parser.add_argument(
+        "--prompt_based",
+        action="store_true",
+        help="If specified, use prompt-based method instead of direct rollouts."
+    )
+    return parser.parse_args()
+
+
 def main():
     """
-    Reads lines from an input JSONL, computes chain-of-thought metrics,
-    and writes the updated lines to an output JSONL file.
+    Main script function.
+    
+    Reads lines from an input JSONL file, computes chain-of-thought metrics for each
+    record using multiprocessing, and writes the updated records to an output JSONL file.
     """
+    args = parse_args()
 
-    input_file = "data/gsm8k/test_qwq_answered.jsonl"           # <-- EDIT as needed
-    output_file = "data/gsm8k/test_qwq_with_algo_results.jsonl"  # <-- EDIT as needed
-
-    batch_size = 50
-    lines_processed = 0  # Example: set to 0 to start from the beginning
+    input_file = args.input_file
+    output_file = args.output_file
+    batch_size = args.batch_size
+    lines_processed = args.lines_processed
+    prompt_based = args.prompt_based
 
     with open(input_file, "r", encoding="utf-8") as f_in, \
          open(output_file, "a", encoding="utf-8") as f_out:
 
-        # Skip already processed lines if resuming
+        # Skip lines if resuming from a previous run.
         for _ in range(lines_processed):
             f_in.readline()
 
@@ -84,11 +142,12 @@ def main():
             if not batch_lines:
                 break  # No more lines to process
 
-            # Parallel processing of lines in the batch
+            # Process the batch in parallel.
             with mp.Pool(mp.cpu_count()) as pool:
-                results = pool.map(get_metrics_for_line, batch_lines)
+                func = partial(get_metrics_for_line, prompt_based=prompt_based)
+                results = pool.map(func, batch_lines)
 
-            # Write the updated JSON objects to output
+            # Write each updated JSON record as a new line.
             for item in results:
                 f_out.write(json.dumps(item, ensure_ascii=False) + "\n")
 
