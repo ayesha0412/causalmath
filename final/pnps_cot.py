@@ -1,8 +1,9 @@
 import pprint
 from typing import Dict, Any, List
 
-from equivalent_ans import is_equivalent_answer, is_equivalent_step
-from base_model import  gpt_api_caller
+from final.equivalent_ans import is_equivalent_answer, is_equivalent_step
+from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
+# from base_model import  gpt_api_caller
 # from test_api import query_api
 
 llm_api = gpt_api_caller # 替换为你的LLM调用函数
@@ -35,7 +36,9 @@ def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
         rollout_metrics["rollout_direct_count"] += 1
 
     # Call the actual LLM API
-    output = llm_api(message)
+    output = llm_api(message, 
+                    #  temperature=1
+                     )
     print("rollout的新节点是:",output)
     return output
 
