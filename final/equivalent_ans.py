@@ -3,7 +3,7 @@ import os, sys
 
 from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-# from test_api import query_api
+from test_api import query_api
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 
 llm_api = qwen_api_caller # 替换为你的LLM调用函数
@@ -79,4 +79,45 @@ def is_equivalent_answer(final_answer, ground_truth): # 结果是否等价
     elif re.search(no_pattern, answer, re.IGNORECASE):
         return False
     else:
+        return False
+    
+# 用于常识推理判断最后是否推理正确
+def is_equivalent_reasoning(statement1, statement2): 
+    prompt = f"""You are an intelligent assistant. Determine whether the following two statements contain the same option letter:
+Statement 1: {statement1}
+Statement 2: {statement2}
+Respond with ‘yes’ if both statements contain the same option letter, or ‘no’ if they contain different option letters."""
+
+    print("Statement 1:", statement1, "Statement 2:", statement2)
+
+    # Use your LLM API to get the response
+    answer = llm_api([{"role": "user", "content": prompt}])
+    
+    # Define regex patterns for "yes" and "no"
+    yes_pattern = r"\byes\b"
+    no_pattern = r"\bno\b"
+
+    # Check if "yes" or "no" is in the answer
+    if re.search(yes_pattern, answer, re.IGNORECASE):
+        return True
+    elif re.search(no_pattern, answer, re.IGNORECASE):
+        return False
+    else:
+        return False
+
+
+# 常识-正则
+def is_equivalent_reasoning_re(statement1, statement2): 
+    # Define regex pattern to match option letters (e.g., A, B, C, D)
+    option_pattern = r"\b([A-D])\b"
+
+    # Extract option letters from both statements
+    match1 = re.search(option_pattern, statement1)
+    match2 = re.search(option_pattern, statement2)
+
+    # If both statements contain an option letter, compare them
+    if match1 and match2:
+        return match1.group(1) == match2.group(1)
+    else:
+        # If no option letter is found in either statement, return False
         return False
