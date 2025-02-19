@@ -5,12 +5,13 @@ from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_e
 # from base_model import  gpt_api_caller
 from test_api import query_api
 
-from final.equivalent_ans import is_equivalent_answer, is_equivalent_step
-from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
+from equivalent_ans import is_equivalent_answer, is_equivalent_step
+# from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 # from base_model import  gpt_api_caller
 # from test_api import query_api
 
-
+llm_api = query_api
+total_prompt = math_prompt
 ###############################################################################
 # Rollout / Equivalence-Check Counters
 ###############################################################################
@@ -54,10 +55,10 @@ def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -
 
     if check_answer: # True代表判断结果是否正确
         # math
-        # return is_equivalent_answer(candidate, ground_truth)
+        return is_equivalent_answer(candidate, ground_truth)
         # 常识
         # return is_equivalent_reasoning(candidate, ground_truth)
-        return is_equivalent_reasoning_re(candidate, ground_truth)
+        # return is_equivalent_reasoning_re(candidate, ground_truth)
     # False代表判断两个step意义是否一致
     return is_equivalent_step(candidate, ground_truth)
 
@@ -312,8 +313,10 @@ def update_chain_if_needed(
 
         # Replace from current step onward
         nodes = context_steps + best_eval_nodes
-        # Move i to the end of the newly added nodes
-        i = len(nodes)
+        # # Move i to the end of the newly added nodes
+        # i = len(nodes)
+        # Continue from the next step in the new chain
+        i = len(context_steps) + 1  # Move to the step after the replaced one
     else:
         # Otherwise, just move on
         i += 1
@@ -435,33 +438,10 @@ def calculate_ps_pn(
 
 # math测试
 
-# if __name__ == "__main__":
-#     print("\nRunning example...")
-#     example_query = "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"
-#     ground_truth = "72"
-#     example_llm_response = llm_api([{"role": "user", "content": example_query}])
-#     print("\nexample_llm_response:",example_llm_response)
-#     results = calculate_ps_pn(
-#         query=example_query,
-#         response=example_llm_response,
-#         ground_truth=ground_truth,
-#         alter_attempts=3,
-#         do_type=1,
-#     )
-
-#     print("\nFinal chain of steps:")
-#     pprint.pprint(results["final_chain"])
-
-#     metrics = {k: v for k, v in results.items() if k != "final_chain"}
-#     print("\nMetrics:")
-#     pprint.pprint(metrics)
-
-# 常识测试
-
 if __name__ == "__main__":
     print("\nRunning example...")
-    example_query = "What is the best way to begin going into trance?\nOptions:\n  A. religious experience\n  B. closed eyes\n  C. loss of control\n  D. sleep\n  E. hallucination\nPlease select the most appropriate answer and respond with the whole reasoning process together with the corresponding letter (A, B, C, D, or E)."
-    ground_truth = "Answer: B"
+    example_query = "Simplify: $\\frac{\\sqrt{2.5^2-0.7^2}}{2.7-2.5}$."
+    ground_truth = "12"
     example_llm_response = llm_api([{"role": "user", "content": example_query}])
     print("\nexample_llm_response:",example_llm_response)
     results = calculate_ps_pn(
@@ -478,3 +458,28 @@ if __name__ == "__main__":
     metrics = {k: v for k, v in results.items() if k != "final_chain"}
     print("\nMetrics:")
     pprint.pprint(metrics)
+
+# # 常识测试
+
+# if __name__ == "__main__":
+#     print("\nRunning example...")
+#     example_query = "What is the best way to begin going into trance?\nOptions:\n  A. religious experience\n  B. closed eyes\n  C. loss of control\n  D. sleep\n  E. hallucination\nPlease select the most appropriate answer and respond with the whole reasoning process together with the corresponding letter (A, B, C, D, or E)."
+#     ground_truth = "Answer: B"
+#     example_llm_response = llm_api([{"role": "user", "content": example_query}])
+#     print("\nexample_llm_response:",example_llm_response)
+#     results = calculate_ps_pn(
+#         query=example_query,
+#         response=example_llm_response,
+#         ground_truth=ground_truth,
+#         alter_attempts=3,
+#         do_type=1,
+#     )
+
+#     print("\nFinal chain of steps:")
+#     pprint.pprint(results["final_chain"])
+
+#     metrics = {k: v for k, v in results.items() if k != "final_chain"}
+#     print("\nMetrics:")
+#     pprint.pprint(metrics)
+    
+    

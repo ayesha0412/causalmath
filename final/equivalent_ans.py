@@ -1,12 +1,12 @@
 import re
 import os, sys
 
-from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
+# from lightllm_api.llm_api import qwen_api_caller, gpt_api_caller
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from test_api import query_api
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 
-llm_api = qwen_api_caller # 替换为你的LLM调用函数
+llm_api = query_api # 替换为你的LLM调用函数
 
 def is_equivalent_step(final_answer, ground_truth): # 两步的含义是否一致
     prompt = f"""
