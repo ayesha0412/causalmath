@@ -440,8 +440,8 @@ def calculate_ps_pn(
 
 if __name__ == "__main__":
     print("\nRunning example...")
-    example_query = "Simplify: $\\frac{\\sqrt{2.5^2-0.7^2}}{2.7-2.5}$."
-    ground_truth = "12"
+    example_query = "Evaluate $\\lceil{\\sqrt{20}}\\rceil^2$."
+    ground_truth = "2"
     example_llm_response = llm_api([{"role": "user", "content": example_query}])
     print("\nexample_llm_response:",example_llm_response)
     results = calculate_ps_pn(
