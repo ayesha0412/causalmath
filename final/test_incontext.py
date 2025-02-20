@@ -110,6 +110,77 @@ Final Answer:
 \\frac{{2.4}}{{0.2}} = 12
 \\]
 
+### Example 3:
+
+**Question:**
+Simplify: \( \\frac{\sqrt{3.6^2 - 1.1^2}}{4.1 - 3.6} \\)
+
+**Original, Verbose CoT:**  
+To simplify the expression, we start by calculating both the numerator and the denominator.
+
+First, calculate the denominator:
+\[
+4.1 - 3.6 = 0.5
+\\]
+
+Next, simplify the numerator, which is \( \sqrt{3.6^2 - 1.1^2} \\).
+
+First, compute \( 3.6^2 \\):
+\[
+3.6^2 = 12.96
+\\]
+
+Now compute \( 1.1^2 \\):
+\[
+1.1^2 = 1.21
+\\]
+
+Subtract these values:
+\[
+3.6^2 - 1.1^2 = 12.96 - 1.21 = 11.75
+\\]
+
+Taking the square root of the result:
+\[
+\sqrt{11.75} \approx 3.43
+\\]
+
+Now substitute back into the original expression:
+\[
+\\frac{\sqrt{3.6^2 - 1.1^2}}{4.1 - 3.6} = \\frac{3.43}{0.5}
+\\]
+
+Finally, perform the division:
+\[
+\\frac{3.43}{0.5} = 6.86
+\\]
+
+Therefore, the simplified expression is \( \\boxed{6.86} \\).
+
+**Optimized, Sufficient and Necessary CoT:**  
+\[
+3.6^2 = 12.96
+\\]
+
+\[
+1.1^2 = 1.21
+\\]
+
+\[
+12.96 - 1.21 = 11.75
+\\]
+
+\[
+\sqrt{11.75} \approx 3.43
+\\]
+
+\[
+4.1 - 3.6 = 0.5
+\\]
+
+\[
+\\frac{3.43}{0.5} = 6.86
+\\]
 ---
 
 ### Instructions Before Final Task
@@ -141,7 +212,7 @@ def query_api(messages: List[Dict[str, str]], model: str = "gpt-4o", temperature
         return str(e)
 
 # 示例调用
-test_question =""
+test_question ="Let $f(x)=|x-p|+|x-15|+|x-p-15|,$ where $0 < p < 15.$ Determine the minimum value taken by $f(x)$ for $x$ in the interval $p \\leq x\\leq15.$"
 messages = [
     {"role": "user", "content": "Now Solve This" + test_question + "Your Simplified and Optimized Answer:"}
 ]
