@@ -1,11 +1,11 @@
 import pprint
 from typing import Dict, Any, List
-from prompts import math_prompt,common_prompt
-from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
+from alg.prompts import math_prompt,common_prompt
+from alg.equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
 # from base_model import  gpt_api_caller
-from test_api import query_api
+from test.test_api import query_api
 
-from equivalent_ans import is_equivalent_answer, is_equivalent_step
+from alg.equivalent_ans import is_equivalent_answer, is_equivalent_step
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 # from base_model import  gpt_api_caller
 # from test_api import query_api

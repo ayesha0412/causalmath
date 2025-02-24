@@ -1,5 +1,0 @@
-digraph {
-	Step1 [label="1 + 1 = ?" color=lightblue style=filled]
-	Step2 [label="The result is 2" color=lightgreen style=filled]
-	Step1 -> Step2 [label="Perform the addition"]
-}
