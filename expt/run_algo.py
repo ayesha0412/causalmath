@@ -10,7 +10,7 @@ from functools import partial
 
 # Ensure we can import the calculate_ps_pn function (adjust the path as needed)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from final.pnps_cot import calculate_ps_pn  # Adjust this import if needed
+from algo.pnps_cot import calculate_ps_pn  # Adjust this import if needed
 
 
 def extract_field(data: dict, possible_keys: list) -> str:

@@ -52,7 +52,7 @@ def compute_statistics(file_path):
         impr_token = stats["improved_token_total"] / n
         token_pct = 100 * (orig_token - impr_token) / orig_token if orig_token else 0
         stats["token_summary"] = (
-            f"{orig_token:.1f} -> {impr_token:.1f} ({token_pct:.1f}% reduction)"
+            f"{orig_token:.1f} → {impr_token:.1f} ({token_pct:.1f}% reduction)"
         )
 
         # Step length comparison
@@ -60,7 +60,7 @@ def compute_statistics(file_path):
         impr_step = stats["improved_step_total"] / n
         step_pct = 100 * (orig_step - impr_step) / orig_step if orig_step else 0
         stats["step_summary"] = (
-            f"{orig_step:.1f} -> {impr_step:.1f} ({step_pct:.1f}% reduction)"
+            f"{orig_step:.1f} → {impr_step:.1f} ({step_pct:.1f}% reduction)"
         )
 
         # Accuracy comparison
@@ -68,7 +68,7 @@ def compute_statistics(file_path):
         impr_acc = 100 * stats["improved_acc_total"] / n
         acc_pct = impr_acc - orig_acc
         stats["acc_summary"] = (
-            f"{orig_acc:.1f}% -> {impr_acc:.1f}% ({acc_pct:+.1f}% change)"
+            f"{orig_acc:.1f}% → {impr_acc:.1f}% ({acc_pct:+.1f}% change)"
         )
 
         # PS(chain) summary
