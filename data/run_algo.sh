@@ -9,14 +9,14 @@ base_dir="data"
 # Loop through each dataset
 for dataset in "${datasets[@]}"; do
     # Define the input file path.
-    input_file="$base_dir/$dataset/test_gpt4o_answered.jsonl"
+    input_file="$base_dir/$dataset/test_qwen_answered.jsonl"
     
     # Check if the input file exists before running the command.
     if [[ -f "$input_file" ]]; then
         echo "Processing dataset '$dataset' concurrently for both prompt-based and non-prompt methods..."
 
         # For non-prompt output file:
-        np_output="$base_dir/$dataset/test_gpt4o_with_gpt4o_rollouts_results.jsonl"
+        np_output="$base_dir/$dataset/test_qwen_with_qwen_rollouts_results_new.jsonl"
         if [[ -f "$np_output" ]]; then
             np_lines=$(wc -l < "$np_output")
         else
@@ -24,7 +24,7 @@ for dataset in "${datasets[@]}"; do
         fi
 
         # For prompt-based output file:
-        pb_output="$base_dir/$dataset/test_gpt4o_with_gpt4o_rollouts_results_prompt_based.jsonl"
+        pb_output="$base_dir/$dataset/test_qwen_with_qwen_rollouts_results_prompt_based_new.jsonl"
         if [[ -f "$pb_output" ]]; then
             pb_lines=$(wc -l < "$pb_output")
         else

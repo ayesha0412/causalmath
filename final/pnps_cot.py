@@ -1,15 +1,18 @@
 import pprint
 from typing import Dict, Any, List
-from prompts import math_prompt,common_prompt
-from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
+import sys,os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# from prompts import math_prompt,common_prompt
+from final.equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
 # from base_model import  gpt_api_caller
-from test_api import query_api
+# from test_api import query_api
 
 from final.equivalent_ans import is_equivalent_answer, is_equivalent_step
 from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 # from base_model import  gpt_api_caller
 # from test_api import query_api
 
+llm_api = qwen_api_caller
 
 ###############################################################################
 # Rollout / Equivalence-Check Counters
@@ -54,10 +57,10 @@ def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -
 
     if check_answer: # True代表判断结果是否正确
         # math
-        # return is_equivalent_answer(candidate, ground_truth)
+        return is_equivalent_answer(candidate, ground_truth)
         # 常识
         # return is_equivalent_reasoning(candidate, ground_truth)
-        return is_equivalent_reasoning_re(candidate, ground_truth)
+        # return is_equivalent_reasoning_re(candidate, ground_truth)
     # False代表判断两个step意义是否一致
     return is_equivalent_step(candidate, ground_truth)
 

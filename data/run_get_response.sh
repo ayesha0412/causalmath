@@ -9,7 +9,7 @@ base_dir="data"
 # Loop through each dataset
 for dataset in "${datasets[@]}"; do
     input_file="$base_dir/$dataset/test.jsonl"
-    output_file="$base_dir/$dataset/test_llama33_answered.jsonl"
+    output_file="$base_dir/$dataset/test_incontext_qwen72b_baseline.jsonl"
 
     # Check if the input file exists before running the command
     if [[ -f "$input_file" ]]; then
