@@ -1,11 +1,13 @@
 import pprint
+import sys
 from typing import Dict, Any, List
-from alg.prompts import math_prompt,common_prompt
-from alg.equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
+from algo.prompts import math_prompt,common_prompt
+from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
 # from base_model import  gpt_api_caller
-from test.test_api import query_api
 
-from alg.equivalent_ans import is_equivalent_answer, is_equivalent_step
+
+from equivalent_ans import is_equivalent_answer, is_equivalent_step
+from test.test_api import query_api
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 # from base_model import  gpt_api_caller
 # from test_api import query_api
@@ -405,6 +407,100 @@ def calculate_ps_pn(
     return results
 
 
+def check_and_intervene(
+    query: str,
+    nodes: List[str],
+    i: int,
+    ground_truth: str,
+    reasoning_attempts: int,
+    do_type: int,
+    alter_attempts: int
+):
+    """
+    Attempts to intervene on a specific node (at index i) if beneficial.
+    Updates the chain of nodes and returns the new chain, the new index,
+    and the PN value computed for this step.
+    """
+    current_step = nodes[i]
+    context_steps = nodes[:i]
+
+    print("\n==== Intervening on step", i, "====")
+    print("Context so far:", context_steps)
+    print("Current step:", current_step)
+
+    # Generate initial replacement text
+    replacement_text = generate_replacement_step(query, context_steps, current_step, do_type)
+
+    # Ensure the replacement text is different from the original step
+    replacement_steps = ensure_different_step(
+        query, replacement_text, current_step, context_steps, alter_attempts, do_type
+    )
+    if not replacement_steps:
+        print('跳过节点, pn为None')
+        print(f"Skipping PN estimation and further processing for step {i}")
+        # Skip this node and move to the next one without evaluating its PN
+        i += 1
+        return nodes, i, None  # Returning None to indicate this step is skipped
+    else:
+        # Evaluate the replacement step over multiple forward passes
+        candidate_step = replacement_steps[0] if replacement_steps else ""
+        average_y = evaluate_replacement_step(
+            query,
+            context_steps,
+            candidate_step,
+            ground_truth,
+            reasoning_attempts
+        )
+        pn = 1 - average_y
+        print(f"PN value for step {i}: {pn}")
+        i += 1
+
+    return nodes, i, pn
+
+
+def test_original_metrics(
+    query: str,
+    response: str,
+    ground_truth: str,
+    reasoning_attempts: int = 3,
+    do_type: int = 0,
+    alter_attempts: int = 5)-> Dict[str, Any]:
+    
+    original_metrics = get_original_metrics(response, ground_truth)
+    
+    # Parse the chain into nodes
+    nodes = parse_nodes(response)
+    pprint.pprint(nodes)
+
+    # Intervene on each node
+    i = 0
+    pn_values = []
+    while i < len(nodes):
+        nodes, i, pn = check_and_intervene(
+            query=query,
+            nodes=nodes,
+            i=i,
+            ground_truth=ground_truth,
+            reasoning_attempts=reasoning_attempts,
+            do_type=do_type,
+            alter_attempts=alter_attempts
+        )
+        # Only append pn if it's not None
+        if pn is not None:
+            pn_values.append(pn)
+    
+    # Assemble final results
+    results = {
+        "original_token_length": original_metrics["original_token_length"],
+        "original_accuracy": original_metrics["original_accuracy"],
+        "original_step_length": original_metrics["original_step_length"],
+        "avg_PN(steps)": sum(pn_values)/len(pn_values) if pn_values else None,
+        "max_PN(steps)": max(pn_values) if pn_values else None,
+        "min_PN(steps)": min(pn_values) if pn_values else None,
+    }
+    
+    return results  
+    
 # -----------------------------------------------------------------------------
 # Example usage:
 # if __name__ == "__main__":
