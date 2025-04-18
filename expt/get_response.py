@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+from typing import Dict, List
+import openai
 import json
 import multiprocessing as mp
 import pandas as pd
@@ -9,7 +10,28 @@ import os
 import argparse
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from lightllm_api.llm_api import gpt_api_caller, gemini_api_caller, qwen_api_caller
+# from lightllm_api.llm_api import gpt_api_caller, gemini_api_caller, qwen_api_caller
+
+openai.api_key = "sk-R7dHf9Dhzz3slsdPB44aBaE60d6e4e238677C31d9aD70e33"
+openai.base_url = 'https://api.shubiaobiao.cn/v1/'
+
+def query_api( 
+    messages: List[Dict[str, str]],
+    model: str = "gpt-4o",
+    temperature: float = 1.0):
+    try:
+        print('query_api')
+        response = openai.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature
+        )
+        # print('get message')
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        return str(e)
+
 
 prompt_template = """## In-Context Learning Prompt (Sufficient and Necessary Reasoning)
 
@@ -200,7 +222,7 @@ def get_answer_for_line(record: dict) -> dict:
     ]
     
     # Call the GPT-based API (update qwen_api_caller to your actual API function)
-    answer = qwen_api_caller(messages)
+    answer = query_api(messages)
     
     # Store the answer into the record under 'qwen_answer'
     record["model_answer"] = answer
