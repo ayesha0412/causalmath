@@ -68,6 +68,13 @@ def parse_args():
 
 def main():
     args = parse_args()
+    import algo.pnps_cot as pnps_module
+    from algo.prompts import common_prompt, math_prompt
+    if "commonsenseqa" in args.input_file or "csqa" in args.input_file:
+        pnps_module.total_prompt = common_prompt
+    else:
+        pnps_module.total_prompt = math_prompt
+    print(f"Using prompt: {'common' if 'csqa' in args.input_file or 'commonsenseqa' in args.input_file else 'math'}")
 
     input_file = args.input_file
     output_file = args.output_file

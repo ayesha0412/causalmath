@@ -396,6 +396,7 @@ def calculate_ps_pn(
         "accuracy": ps,  # final PS is the final accuracy
         "step_length": step_length,
         "final_chain": nodes,
+        "pn_per_step": pn_values,     # ← new line
 
         # New counters
         "total_rollout_calls": rollout_metrics["total_rollout_calls"],

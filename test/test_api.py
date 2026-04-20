@@ -1,25 +1,10 @@
 from typing import Dict, List
-import openai
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from qwen_local import cerebras_query      # ← only change from before
 
-openai.api_key = "sk-O8VHM4wmKqyidqqYF7201937F6Ea4fC0Ac1713C99dC9A1B6"
-openai.base_url = 'https://api.shubiaobiao.cn/v1/'
-
-def query_api( 
-    messages: List[Dict[str, str]],
-    model: str = "gpt-4o",
-    temperature: float = 1.0):
-    try:
-        print('query_api')
-        response = openai.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature
-        )
-        # print('get message')
-        return response.choices[0].message.content.strip()
-
-    except Exception as e:
-        return str(e)
+def query_api(messages: List[Dict[str, str]], model=None, temperature=0.7) -> str:
+    return cerebras_query(messages, model=model, temperature=temperature)
 
 
 # final_answer = 1
