@@ -2,18 +2,16 @@ import pprint
 import sys
 from typing import Dict, Any, List
 from algo.prompts import math_prompt,common_prompt
-from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re,is_equivalent_reasoning, is_equivalent_step
-# from base_model import  gpt_api_caller
-
-
-from equivalent_ans import is_equivalent_answer, is_equivalent_step
+from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re, is_equivalent_reasoning, is_equivalent_step
 from test.test_api import query_api
+from concurrent.futures import ThreadPoolExecutor
 # from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
 # from base_model import  gpt_api_caller
 # from test_api import query_api
 
 llm_api = query_api
 total_prompt = math_prompt
+is_commonsense = False  # set to True by run_algo_o.py for CSQA datasets
 ###############################################################################
 # Rollout / Equivalence-Check Counters
 ###############################################################################
@@ -35,17 +33,17 @@ def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
 
     # Count the rollout type
     if do_type == 1:
-        print("rollout的类型是:prompt-intervention")
+        print("Rollout type: prompt-intervention")
         rollout_metrics["rollout_prompt_intervention_count"] += 1
     else:
-        print("rollout的类型是:direct")
+        print("Rollout type: direct")
         rollout_metrics["rollout_direct_count"] += 1
 
     # Call the actual LLM API
     output = llm_api(message, 
                     #  temperature=1
                      )
-    print("rollout的新节点是:",output)
+    print("New rollout node:", output)
     return output
 
 
@@ -55,13 +53,10 @@ def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -
     """
     rollout_metrics["equiv_check_calls"] += 1
 
-    if check_answer: # True代表判断结果是否正确
-        # math
+    if check_answer:
+        if is_commonsense:
+            return is_equivalent_reasoning_re(candidate, ground_truth)
         return is_equivalent_answer(candidate, ground_truth)
-        # 常识
-        # return is_equivalent_reasoning(candidate, ground_truth)
-        # return is_equivalent_reasoning_re(candidate, ground_truth)
-    # False代表判断两个step意义是否一致
     return is_equivalent_step(candidate, ground_truth)
 
 ###############################################################################
@@ -93,7 +88,7 @@ def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
     if original_steps:
         final_answer = original_steps[-1]
         flag = counted_equiv_check(final_answer, ground_truth,check_answer=True)
-        print("判断原cot推理结果是否正确:",flag)
+        print("Is original CoT reasoning correct:", flag)
         original_ps = 1 if flag else 0
     else:
         final_answer = ""
@@ -182,15 +177,15 @@ def ensure_different_step(
         # If no steps or the first new step is not equivalent to the original step, return
         flag = counted_equiv_check(replacement_steps[0], original_step)
         if not replacement_steps or not flag:
-            print("新rollout的节点和原先不一致")
+            print("New rollout node differs from original")
             return replacement_steps
         else:
             # If the new step is still too similar, try regenerating
-            print("新rollout的节点和原先一致,重新生成")
+            print("New rollout node is same as original, regenerating...")
             replacement_text = generate_replacement_step(query, context_steps, original_step, do_type)
 
             if attempt == alter_attempts:
-                print("******达到最大尝试次数****")
+                print("****** Reached maximum attempts ****")
                 print(f"Reached max attempts ({alter_attempts}); replacement step is still similar.")
                 return None
 
@@ -204,44 +199,35 @@ def evaluate_replacement_step(
     ground_truth: str,
     reasoning_attempts: int
 ) -> float:
-    """
-    Given a single candidate replacement step, attempts forward passes reasoning_attempts times.
-    Returns the average correctness (average Y value).
-    """
-    y_values = []
+    eval_context_steps = context_steps + [candidate_step]
+    eval_message = [
+        {"role": "system", "content": total_prompt},
+        {
+            "role": "user",
+            "content": (
+                f"Question:\n{query}\n\n"
+                "Current reasoning steps:\n"
+                + '\n\n'.join(eval_context_steps)
+            )
+        }
+    ]
 
-    for _ in range(reasoning_attempts):
-        eval_context_steps = context_steps + [candidate_step]
-        eval_message = [
-            {
-                "role": "system",
-                "content": total_prompt
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Question:\n{query}\n\n"
-                    "Current reasoning steps:\n"
-                    + '\n\n'.join(eval_context_steps)
-                )
-            }
-        ]
-        # Treat these as direct rollouts (do_type=0)
+    def single_rollout(_):
         evaluation_text = counted_rollout_call(0, eval_message)
         if not evaluation_text:
-            # No generation; consider this a wrong answer
-            y_values.append(0)
-        else:
-            eval_nodes = parse_nodes(evaluation_text)
-            eval_final_answer = eval_nodes[-1] if eval_nodes else ""
-            is_correct = counted_equiv_check(eval_final_answer, ground_truth,check_answer=True)
-            print("新rollout的节点得到的最终答案是否正确:",is_correct)
-            y_values.append(1 if is_correct else 0)
+            return 0
+        eval_nodes = parse_nodes(evaluation_text)
+        eval_final_answer = eval_nodes[-1] if eval_nodes else ""
+        is_correct = counted_equiv_check(
+            eval_final_answer, ground_truth, check_answer=True
+        )
+        print("Is new rollout final answer correct:", is_correct)
+        return 1 if is_correct else 0
 
-    if len(y_values) == 0:
-        return 0.0
-    return sum(y_values) / len(y_values)
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        y_values = list(executor.map(single_rollout, range(reasoning_attempts)))
 
+    return sum(y_values) / len(y_values) if y_values else 0.0
 
 def update_chain_if_needed(
     query: str,
@@ -273,7 +259,7 @@ def update_chain_if_needed(
         query, replacement_text, current_step, context_steps, alter_attempts, do_type
     )
     if not replacement_steps:
-        print('跳过节点,pn为None')
+        print('Skipping node, PN is None')
         print(f"Skipping PN estimation and further processing for step {i}")
         # Skip this node and move to the next one without evaluating its PN
         i += 1
@@ -313,12 +299,9 @@ def update_chain_if_needed(
         best_evaluation_text = counted_rollout_call(0, best_eval_message)
         best_eval_nodes = parse_nodes(best_evaluation_text)
 
-        # Replace from current step onward
+        # Replace from current step onward and stop — paper Algorithm 1 stops after first replacement
         nodes = context_steps + best_eval_nodes
-        # # Move i to the end of the newly added nodes
-        # i = len(nodes)
-        # Continue from the next step in the new chain
-        i = len(context_steps) + 1  # Move to the step after the replaced one
+        i = len(nodes)  # Exit the while loop; replacement chain is final
     else:
         # Otherwise, just move on
         i += 1
@@ -355,7 +338,30 @@ def calculate_ps_pn(
     nodes = parse_nodes(response)
     pprint.pprint(nodes)
 
+    # Algorithm 1: if PS=0, chain is insufficient — Lemma 1 requires PS=1 for PN identifiability.
+    # Return S_init unchanged without running PN estimation.
+    if original_metrics["original_ps"] == 0:
+            return {
+                "original_token_length": original_metrics["original_token_length"],
+                "original_accuracy": 0,
+                "original_step_length": original_metrics["original_step_length"],
+                "avg_PN(steps)": None,
+                "max_PN(steps)": None,
+                "min_PN(steps)": None,
+                "PS(chain)": 0,
+                "token_length": original_metrics["original_token_length"],
+                "accuracy": 0,
+                "step_length": original_metrics["original_step_length"],
+                "final_chain": nodes,
+                "pn_per_step": [],
+                "total_rollout_calls": rollout_metrics["total_rollout_calls"],
+                "equiv_check_calls": rollout_metrics["equiv_check_calls"],
+                "rollout_prompt_intervention_count": 0,
+                "rollout_direct_count": 0,
+            }
+
     # 3. Intervene on each node
+
     i = 0
     pn_values = []
     while i < len(nodes):
@@ -376,11 +382,16 @@ def calculate_ps_pn(
     # 4. After all possible interventions, compute final metrics
     final_answer = nodes[-1] if nodes else ""
     ps = 1 if counted_equiv_check(final_answer, ground_truth,check_answer=True) else 0
-    print("最终的cot是否正确(PS):",ps)
-    final_chain = '\n\n'.join(nodes)
+    print("Is final CoT correct (PS):", ps)
 
-    # Approximate token length by counting words
-    token_length = len(final_chain.split())
+    # If optimization broke a previously correct chain, revert to original
+    if ps == 0 and original_metrics["original_ps"] == 1:
+        print("Replacement chain incorrect — reverting to original chain.")
+        nodes = parse_nodes(response)
+        ps = 1
+
+    final_chain = nodes
+    token_length = len('\n\n'.join(nodes).split())
     step_length = len(nodes)
 
     # Assemble final results
@@ -395,8 +406,8 @@ def calculate_ps_pn(
         "token_length": token_length,
         "accuracy": ps,  # final PS is the final accuracy
         "step_length": step_length,
-        "final_chain": nodes,
-        "pn_per_step": pn_values,     # ← new line
+        "final_chain": final_chain,  # Use the string, not the list
+        "pn_per_step": pn_values,
 
         # New counters
         "total_rollout_calls": rollout_metrics["total_rollout_calls"],
@@ -437,7 +448,7 @@ def check_and_intervene(
         query, replacement_text, current_step, context_steps, alter_attempts, do_type
     )
     if not replacement_steps:
-        print('跳过节点, pn为None')
+        print('Skipping node, PN is None')
         print(f"Skipping PN estimation and further processing for step {i}")
         # Skip this node and move to the next one without evaluating its PN
         i += 1
@@ -533,7 +544,7 @@ def test_original_metrics(
 #     print("\nMetrics:")
 #     pprint.pprint(metrics)
 
-# math测试
+# Math test
 
 if __name__ == "__main__":
     print("\nRunning example...")
@@ -556,7 +567,7 @@ if __name__ == "__main__":
     print("\nMetrics:")
     pprint.pprint(metrics)
 
-# # 常识测试
+# # Commonsense test
 
 # if __name__ == "__main__":
 #     print("\nRunning example...")

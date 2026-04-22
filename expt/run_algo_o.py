@@ -11,9 +11,12 @@ import time
 
 init(autoreset=True)
 
-# 添加路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from algo.pnps_cot import test_original_metrics
+
+# CHANGE 1: Use calculate_ps_pn instead of test_original_metrics
+# Original repo used test_original_metrics which only measures PN without pruning.
+# calculate_ps_pn does both measurement AND pruning, producing full Table 1 metrics.
+from algo.pnps_cot import calculate_ps_pn as test_original_metrics
 
 
 def extract_field(data: dict, possible_keys: list) -> str:
@@ -27,19 +30,23 @@ def extract_field(data: dict, possible_keys: list) -> str:
     return ""
 
 
-def get_metrics_for_line(json_line: str, prompt_based: bool) -> dict:
+def get_metrics_for_line(json_line: str, prompt_based: bool, threshold: float, rollouts: int) -> dict:
     data = json.loads(json_line.strip())
 
     question = extract_field(data, ["question"])
     model_cot = extract_field(data, ["model_answer"])
     ground_truth = extract_field(data, ["answer"])
-    model_cot = "\n\n".join(model_cot)
+
+    # CHANGE 2: Unescape \\n\\n to real \n\n so parse_nodes splits correctly
+    # Without this, the entire CoT is treated as one step
+    model_cot = model_cot.replace("\\n\\n", "\n\n")
 
     results = test_original_metrics(
         query=question,
         response=model_cot,
         ground_truth=ground_truth,
-        reasoning_attempts=3,
+        threshold=threshold,
+        reasoning_attempts=rollouts,
         do_type=1 if prompt_based else 0,
         alter_attempts=3
     )
@@ -62,24 +69,38 @@ def parse_args():
                         help="Number of lines to skip (already processed). Default is 0.")
     parser.add_argument("--prompt_based", action="store_true",
                         help="Use prompt-based method instead of direct rollouts.")
+    parser.add_argument("--threshold", "-t", type=float, default=0.5,
+                        help="PN threshold below which a step is pruned. Default 0.5.")
+    parser.add_argument("--rollouts", "-k", type=int, default=5,
+                        help="Monte-Carlo rollouts per step for PN estimation. Default 5.")
     parser.add_argument("--append", action="store_true", default=True,
                         help="Append results to the output file instead of overwriting.")
     return parser.parse_args()
 
+
 def main():
     args = parse_args()
+
+    # CHANGE 3: Auto-switch prompt based on dataset
+    # math_prompt for GSM-8K, MATH-500, AIME
+    # common_prompt for CommonsenseQA
     import algo.pnps_cot as pnps_module
     from algo.prompts import common_prompt, math_prompt
-    if "commonsenseqa" in args.input_file or "csqa" in args.input_file:
+    is_csqa = "commonsenseqa" in args.input_file or "csqa" in args.input_file
+    if is_csqa:
         pnps_module.total_prompt = common_prompt
+        pnps_module.is_commonsense = True
     else:
         pnps_module.total_prompt = math_prompt
-    print(f"Using prompt: {'common' if 'csqa' in args.input_file or 'commonsenseqa' in args.input_file else 'math'}")
+        pnps_module.is_commonsense = False
+    print(f"Using prompt: {'common (commonsense)' if is_csqa else 'math'}")
 
     input_file = args.input_file
     output_file = args.output_file
     lines_processed = args.lines_processed
     prompt_based = args.prompt_based
+    threshold = args.threshold
+    rollouts = args.rollouts
     append_mode = args.append
     batch_size = args.batch_size if args.batch_size > 0 else 1
 
@@ -87,14 +108,14 @@ def main():
     error_file = output_file.replace(".jsonl", "_errors.jsonl")
     log_file = output_file.replace(".jsonl", "_log.txt")
 
-    # 日志文件初始化
+    # CHANGE 4: English log messages
     log = open(log_file, "a", encoding="utf-8")
-    log.write(f"\n====== 处理开始 {time.ctime()} ======\n")
-    log.write(f"读取自：{input_file}\n输出至：{output_file}（mode={mode}）\n错误记录：{error_file}\n\n")
+    log.write(f"\n====== Run started {time.ctime()} ======\n")
+    log.write(f"Input: {input_file}\nOutput: {output_file} (mode={mode})\nErrors: {error_file}\n\n")
 
-    print(f"{Fore.BLUE}📂 输入文件：{input_file}")
-    print(f"{Fore.BLUE}📄 输出文件：{output_file}（{'追加' if append_mode else '覆盖'}）")
-    print(f"{Fore.BLUE}⚙️ 开始处理，跳过前 {lines_processed} 行，每批处理 {batch_size} 行\n")
+    print(f"{Fore.BLUE}📂 Input file: {input_file}")
+    print(f"{Fore.BLUE}📄 Output file: {output_file} ({'append' if append_mode else 'overwrite'})")
+    print(f"{Fore.BLUE}⚙️ Starting, skipping {lines_processed} lines, batch size {batch_size}\n")
 
     start_time = time.time()
 
@@ -108,7 +129,7 @@ def main():
         line_num = lines_processed
         eof = False
 
-        pbar = tqdm(desc="🚀 正在处理", unit="行", ncols=80)
+        pbar = tqdm(desc="🚀 Processing", unit="lines", ncols=80)
 
         while not eof:
             batch = []
@@ -122,27 +143,30 @@ def main():
             for idx, line in enumerate(batch):
                 line_num += 1
                 try:
-                    result = get_metrics_for_line(line, prompt_based)
-                    print("写入内容为：", result)
+                    result = get_metrics_for_line(line, prompt_based, threshold, rollouts)
+                    print("Writing content: ", result)
                     f_out.write(json.dumps(result, ensure_ascii=False) + "\n")
-                    f_out.flush()  # 添加这一行立即刷新
-                    print(f"{Fore.GREEN}✅ 成功写入第 {line_num} 行{Style.RESET_ALL}")
+                    f_out.flush()
+                    print(f"{Fore.GREEN}✅ Successfully wrote line {line_num}{Style.RESET_ALL}")
                     log.write(f"[OK] Line {line_num} written.\n")
+                    log.flush()
                 except Exception as e:
                     f_err.write(line.strip() + "\n")
-                    f_err.flush()  # 如果需要错误文件也立即刷新，可以加这里
-                    print(f"{Fore.RED}❌ 第 {line_num} 行处理失败：{e}{Style.RESET_ALL}")
+                    f_err.flush()
+                    print(f"{Fore.RED}❌ Line {line_num} failed: {e}{Style.RESET_ALL}")
                     log.write(f"[ERR] Line {line_num} failed: {e}\n")
-                
+                    log.flush()
+
                 pbar.update(1)
 
         pbar.close()
 
     elapsed = time.time() - start_time
-    print(f"\n{Fore.GREEN}🎉 全部处理完成！共处理 {line_num - lines_processed} 行，耗时 {elapsed:.2f} 秒。{Style.RESET_ALL}")
-    log.write(f"\n✅ 全部完成，共 {line_num - lines_processed} 行，耗时 {elapsed:.2f} 秒。\n")
-    log.write(f"====== 处理结束 {time.ctime()} ======\n")
+    print(f"\n{Fore.GREEN}🎉 Done! {line_num - lines_processed} lines processed in {elapsed:.2f}s{Style.RESET_ALL}")
+    log.write(f"\n✅ All done. {line_num - lines_processed} lines in {elapsed:.2f}s\n")
+    log.write(f"====== Run ended {time.ctime()} ======\n")
     log.close()
+
 
 if __name__ == "__main__":
     main()
