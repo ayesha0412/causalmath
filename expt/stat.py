@@ -1,5 +1,6 @@
 import json
 import argparse
+import os
 
 
 def _empty_stats():
@@ -18,7 +19,6 @@ def _empty_stats():
         "pn_step_count":        0,
         "pn_global_max":        None,
         "pn_global_min":        None,
-        "schema":               "unknown",
     }
 
 
@@ -37,59 +37,46 @@ def _accumulate(stats, metrics):
     if pn_per_step:
         stats["pn_sum_total"]  += sum(pn_per_step)
         stats["pn_step_count"] += len(pn_per_step)
-        step_max = max(pn_per_step)
-        step_min = min(pn_per_step)
-        if stats["pn_global_max"] is None or step_max > stats["pn_global_max"]:
-            stats["pn_global_max"] = step_max
-        if stats["pn_global_min"] is None or step_min < stats["pn_global_min"]:
-            stats["pn_global_min"] = step_min
-    if "token_length" in metrics and "PS(chain)" in metrics:
-        stats["schema"] = "full optimization schema"
-    elif "avg_PN(steps)" in metrics:
-        stats["schema"] = "PN measurement only"
+        mx = max(pn_per_step)
+        mn = min(pn_per_step)
+        if stats["pn_global_max"] is None or mx > stats["pn_global_max"]:
+            stats["pn_global_max"] = mx
+        if stats["pn_global_min"] is None or mn < stats["pn_global_min"]:
+            stats["pn_global_min"] = mn
 
 
-def _print_stats(stats, label):
+def _derive(stats):
     n = stats["total_entries"]
     if n == 0:
-        print(f"\n{label}: no entries.")
-        return
-
-    orig_tok  = stats["original_token_total"] / n
-    impr_tok  = stats["improved_token_total"]  / n
-    orig_stp  = stats["original_step_total"]   / n
-    impr_stp  = stats["improved_step_total"]   / n
-    orig_acc  = 100.0 * stats["original_acc_total"]  / n
-    impr_acc  = 100.0 * stats["improved_acc_total"]  / n
-    ps_chain  = 100.0 * stats["ps_chain_total"]      / n
-    pn_n      = stats["pn_step_count"]
-    avg_pn    = stats["pn_sum_total"] / pn_n if pn_n else None
-    max_pn    = stats["pn_global_max"]
-    min_pn    = stats["pn_global_min"]
-
-    tok_pct   = 100.0 * (orig_tok - impr_tok) / orig_tok if orig_tok else 0
-    stp_pct   = 100.0 * (orig_stp - impr_stp) / orig_stp if orig_stp else 0
-    acc_delta = impr_acc - orig_acc
-
-    avg_equiv   = stats["total_equiv_check"]   / n
-    avg_rollout = stats["total_rollout_calls"]  / n
-    avg_total   = avg_equiv + avg_rollout
-
-    print(f"\n{label} ({n} entries):")
-    print(f"  Token Length: {orig_tok:.1f} → {impr_tok:.1f} ({tok_pct:.1f}% reduction)")
-    print(f"  Step Length:  {orig_stp:.1f} → {impr_stp:.1f} ({stp_pct:.1f}% reduction)")
-    print(f"  Accuracy:     {orig_acc:.1f}% → {impr_acc:.1f}% ({acc_delta:+.1f}% change)")
-    print(f"  PS(chain):    {ps_chain:.1f}%")
-    if avg_pn is not None:
-        print(f"  PN(steps):    avg={avg_pn:.3f} (over {pn_n} steps), max={max_pn:.3f}, min={min_pn:.3f}")
-    print(f"  API Calls:    Equiv: {avg_equiv:.1f} + Rollouts: {avg_rollout:.1f} = Total: {avg_total:.1f} avg/entry")
-    print(f"  Schema:       {stats['schema']}")
+        return None
+    orig_tok = stats["original_token_total"] / n
+    impr_tok = stats["improved_token_total"]  / n
+    orig_stp = stats["original_step_total"]   / n
+    impr_stp = stats["improved_step_total"]   / n
+    orig_acc = 100.0 * stats["original_acc_total"] / n
+    impr_acc = 100.0 * stats["improved_acc_total"] / n
+    ps_pct   = 100.0 * stats["ps_chain_total"]     / n
+    pn_n     = stats["pn_step_count"]
+    avg_pn   = stats["pn_sum_total"] / pn_n if pn_n else 0.0
+    tok_red  = 100.0 * (orig_tok - impr_tok) / orig_tok if orig_tok else 0.0
+    stp_red  = 100.0 * (orig_stp - impr_stp) / orig_stp if orig_stp else 0.0
+    return dict(
+        n=n,
+        orig_tok=orig_tok, impr_tok=impr_tok, tok_red=tok_red,
+        orig_stp=orig_stp, impr_stp=impr_stp, stp_red=stp_red,
+        orig_acc=orig_acc, impr_acc=impr_acc, acc_delta=impr_acc - orig_acc,
+        ps_pct=ps_pct, avg_pn=avg_pn,
+        pn_max=stats["pn_global_max"] or 0.0,
+        pn_min=stats["pn_global_min"] or 0.0,
+        avg_equiv=stats["total_equiv_check"] / n,
+        avg_rollout=stats["total_rollout_calls"] / n,
+    )
 
 
 def compute_statistics(file_path):
-    all_stats  = _empty_stats()   # all entries
-    ps1_stats  = _empty_stats()   # entries where base model was correct (PS=1)
-    ps0_stats  = _empty_stats()   # entries where base model was wrong  (PS=0)
+    all_stats = _empty_stats()
+    ps1_stats = _empty_stats()
+    ps0_stats = _empty_stats()
 
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -111,20 +98,40 @@ def compute_statistics(file_path):
         print("No entries found.")
         return
 
-    # --- overall (matches paper Table 1 denominator) ---
-    _print_stats(all_stats, "ALL entries (paper Table 1 denominator)")
+    a  = _derive(all_stats)
+    p1 = _derive(ps1_stats)
+    p0 = _derive(ps0_stats)
 
-    # --- PS=1 subset: the only subset where PNS optimization runs ---
-    # Accuracy improvement here directly reflects the algorithm's effect.
-    _print_stats(ps1_stats, "PS=1 subset (base model correct — PNS optimization applied)")
+    dataset = os.path.basename(file_path)
 
-    # --- PS=0 subset: algorithm skips these; accuracy stays 0 ---
-    _print_stats(ps0_stats, "PS=0 subset (base model wrong  — algorithm skipped)")
+    W = 72
+    print(f"\n{'='*W}")
+    print(f"  {dataset}")
+    print(f"{'='*W}")
+
+    def section(label, d, note=""):
+        if d is None:
+            return
+        sign = "+" if d["acc_delta"] >= 0 else ""
+        print(f"\n  {label}  (N={d['n']}){('  ' + note) if note else ''}")
+        print(f"  {'─'*60}")
+        print(f"  Token Length : {d['orig_tok']:6.1f}  →  {d['impr_tok']:6.1f}  ({d['tok_red']:.1f}% reduction)")
+        print(f"  Step Length  : {d['orig_stp']:6.1f}  →  {d['impr_stp']:6.1f}  ({d['stp_red']:.1f}% reduction)")
+        print(f"  Accuracy     : {d['orig_acc']:5.1f}%  →  {d['impr_acc']:5.1f}%  ({sign}{d['acc_delta']:.1f}%)")
+        print(f"  PS(chain)    : {d['ps_pct']:.1f}%")
+        print(f"  PN(steps)    : avg={d['avg_pn']:.3f}  max={d['pn_max']:.3f}  min={d['pn_min']:.3f}")
+        print(f"  API Calls    : Equiv {d['avg_equiv']:.1f} + Rollouts {d['avg_rollout']:.1f} = {d['avg_equiv']+d['avg_rollout']:.1f} avg/entry")
+
+    section("ALL   ", a, "← Table 1 denominator")
+    section("PS=1  ", p1, "← base model correct, PNS applied")
+    section("PS=0  ", p0, "← base model wrong, skipped")
+
+    print(f"\n{'='*W}\n")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyze optimization metrics")
-    parser.add_argument("file", help="JSONL file containing metrics")
+    parser = argparse.ArgumentParser(description="Print Table 1 stats from a PNS output JSONL")
+    parser.add_argument("file", help="JSONL file with metrics")
     args = parser.parse_args()
     compute_statistics(args.file)
 

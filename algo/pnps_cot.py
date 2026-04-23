@@ -1,13 +1,19 @@
 import pprint
 import sys
+import threading
 from typing import Dict, Any, List
+import os
 from algo.prompts import math_prompt,common_prompt
-from equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re, is_equivalent_reasoning, is_equivalent_step
-from test.test_api import query_api
+from .equivalent_ans import is_equivalent_answer, is_equivalent_reasoning_re, is_equivalent_reasoning, is_equivalent_step
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from qwen_local import cerebras_query
 from concurrent.futures import ThreadPoolExecutor
-# from lightllm_api.llm_api import gpt_api_caller, qwen_api_caller
-# from base_model import  gpt_api_caller
-# from test_api import query_api
+
+def query_api(messages, model=None, temperature=0.7):
+    # Rollouts use thinking=False — without internal deliberation the model is
+    # weaker and more likely to fail when a necessary step is removed, giving
+    # realistic PN signal instead of PN=0 for everything.
+    return cerebras_query(messages, model=model, temperature=temperature, thinking=False)
 
 llm_api = query_api
 total_prompt = math_prompt
@@ -15,43 +21,39 @@ is_commonsense = False  # set to True by run_algo_o.py for CSQA datasets
 ###############################################################################
 # Rollout / Equivalence-Check Counters
 ###############################################################################
-rollout_metrics = {
-    "total_rollout_calls": 0,
-    "equiv_check_calls": 0,
-    "rollout_prompt_intervention_count": 0,
-    "rollout_direct_count": 0
-}
+def _new_metrics():
+    return {
+        "total_rollout_calls": 0,
+        "equiv_check_calls": 0,
+        "rollout_prompt_intervention_count": 0,
+        "rollout_direct_count": 0,
+    }
 
 
-def counted_rollout_call(do_type: int, message: List[Dict[str, str]]) -> str:
-    """
-    Wraps qwen_api_caller to count how many rollouts are made 
-    and whether they are prompt-intervention or direct rollouts.
-    """
-    # Increment total rollouts
-    rollout_metrics["total_rollout_calls"] += 1
+def counted_rollout_call(do_type: int, message: List[Dict[str, str]],
+                         _m: dict, _m_lock: threading.Lock) -> str:
+    with _m_lock:
+        _m["total_rollout_calls"] += 1
+        if do_type == 1:
+            _m["rollout_prompt_intervention_count"] += 1
+        else:
+            _m["rollout_direct_count"] += 1
 
-    # Count the rollout type
     if do_type == 1:
         print("Rollout type: prompt-intervention")
-        rollout_metrics["rollout_prompt_intervention_count"] += 1
     else:
         print("Rollout type: direct")
-        rollout_metrics["rollout_direct_count"] += 1
 
-    # Call the actual LLM API
-    output = llm_api(message, 
-                    #  temperature=1
-                     )
+    output = llm_api(message)
     print("New rollout node:", output)
     return output
 
 
-def counted_equiv_check(candidate: str, ground_truth: str, check_answer=False) -> bool:
-    """
-    Wraps is_equivalent_answer to count how many times equivalence checks occur.
-    """
-    rollout_metrics["equiv_check_calls"] += 1
+def counted_equiv_check(candidate: str, ground_truth: str,
+                        _m: dict, _m_lock: threading.Lock,
+                        check_answer=False) -> bool:
+    with _m_lock:
+        _m["equiv_check_calls"] += 1
 
     if check_answer:
         if is_commonsense:
@@ -71,23 +73,15 @@ def parse_nodes(text: str) -> List[str]:
     return [node.strip() for node in nodes if node.strip()]
 
 
-def get_original_metrics(response: str, ground_truth: str) -> Dict[str, Any]:
-    """
-    Computes the original metrics from the unmodified chain-of-thought:
-    - original_token_length
-    - original_accuracy
-    - original_step_length
-    - original_ps
-    """
-    # Approximate token length by counting words
+def get_original_metrics(response: str, ground_truth: str,
+                         _m: dict, _m_lock: threading.Lock) -> Dict[str, Any]:
     original_token_length = len(response.split())
-    # Split steps
     original_steps = parse_nodes(response)
     original_step_length = len(original_steps)
 
     if original_steps:
         final_answer = original_steps[-1]
-        flag = counted_equiv_check(final_answer, ground_truth,check_answer=True)
+        flag = counted_equiv_check(final_answer, ground_truth, _m, _m_lock, check_answer=True)
         print("Is original CoT reasoning correct:", flag)
         original_ps = 1 if flag else 0
     else:
@@ -107,22 +101,32 @@ def generate_replacement_step(
     query: str,
     context_steps: List[str],
     current_step: str,
-    do_type: int
+    do_type: int,
+    _m: dict,
+    _m_lock: threading.Lock,
 ) -> str:
     """
     Generates a replacement step for the current_step based on do_type logic.
     Incorporates the original query into the user content.
     """
+    # Bug fix: force single-step output so the replacement is a reasoning step,
+    # not the full answer. Without this constraint, thinking=False models jump
+    # straight to the boxed answer, making PN estimation trivial (always 0).
+    single_step_instruction = (
+        "\nIMPORTANT: Output ONLY ONE single reasoning step — not the full solution. "
+        "Do NOT jump to the final answer. Stop after one step."
+    )
+
     if do_type == 1:
         # Based on prompt intervention (skip current meaning)
         skip_message = [
             {
                 "role": "system",
                 "content": (
-                    total_prompt+
-                    "Ensure the next output node does not match "
-                    f"the meaning of:\n{current_step}"
-                    "Avoid repeating the final result directly when the calculation is already clear."
+                    total_prompt
+                    + single_step_instruction
+                    + "\nEnsure this step does NOT convey the same meaning as:\n"
+                    + current_step
                 )
             },
             {
@@ -132,16 +136,16 @@ def generate_replacement_step(
                     "Current reasoning steps:\n"
                     + '\n\n'.join(context_steps)
                     + '\n\n'
+                    "Next step (ONE step only, different from the original):"
                 )
             }
         ]
-        replacement_text = counted_rollout_call(do_type, skip_message)
+        replacement_text = counted_rollout_call(do_type, skip_message, _m, _m_lock)
     else:
-        # Direct rollout with the query plus existing steps
         context_message = [
             {
                 "role": "system",
-                "content": total_prompt
+                "content": total_prompt + single_step_instruction
             },
             {
                 "role": "user",
@@ -150,10 +154,11 @@ def generate_replacement_step(
                     "Current reasoning steps:\n"
                     + '\n\n'.join(context_steps)
                     + '\n\n'
+                    "Next step (ONE step only):"
                 )
             }
         ]
-        replacement_text = counted_rollout_call(do_type, context_message)
+        replacement_text = counted_rollout_call(do_type, context_message, _m, _m_lock)
 
     return replacement_text
 
@@ -164,7 +169,9 @@ def ensure_different_step(
     original_step: str,
     context_steps: List[str],
     alter_attempts: int,
-    do_type: int
+    do_type: int,
+    _m: dict,
+    _m_lock: threading.Lock,
 ) -> List[str]:
     """
     Ensures the first replacement step is different from the original step
@@ -175,14 +182,13 @@ def ensure_different_step(
         replacement_steps = parse_nodes(replacement_text)
 
         # If no steps or the first new step is not equivalent to the original step, return
-        flag = counted_equiv_check(replacement_steps[0], original_step)
+        flag = counted_equiv_check(replacement_steps[0], original_step, _m, _m_lock)
         if not replacement_steps or not flag:
             print("New rollout node differs from original")
             return replacement_steps
         else:
-            # If the new step is still too similar, try regenerating
             print("New rollout node is same as original, regenerating...")
-            replacement_text = generate_replacement_step(query, context_steps, original_step, do_type)
+            replacement_text = generate_replacement_step(query, context_steps, original_step, do_type, _m, _m_lock)
 
             if attempt == alter_attempts:
                 print("****** Reached maximum attempts ****")
@@ -197,34 +203,48 @@ def evaluate_replacement_step(
     context_steps: List[str],
     candidate_step: str,
     ground_truth: str,
-    reasoning_attempts: int
+    reasoning_attempts: int,
+    _m: dict,
+    _m_lock: threading.Lock,
 ) -> float:
     eval_context_steps = context_steps + [candidate_step]
+    # Bug fix: add a strong continuation constraint so the rollout model cannot
+    # re-derive the answer from the original question. Without this, even a
+    # badly wrong candidate_step leads to a correct rollout (average_y≈1, PN≈0
+    # for every step). The model must continue strictly from the given steps.
+    continuation_instruction = (
+        "\nCRITICAL: Continue the reasoning STRICTLY from the partial steps provided. "
+        "Do NOT re-read or re-solve from the original question. "
+        "Pick up exactly where the last step left off."
+    )
     eval_message = [
-        {"role": "system", "content": total_prompt},
+        {"role": "system", "content": total_prompt + continuation_instruction},
         {
             "role": "user",
             "content": (
-                f"Question:\n{query}\n\n"
-                "Current reasoning steps:\n"
+                f"Question (for reference only — do not restart):\n{query}\n\n"
+                "Partial reasoning so far:\n"
                 + '\n\n'.join(eval_context_steps)
+                + "\n\nContinue strictly from the last step above:"
             )
         }
     ]
 
     def single_rollout(_):
-        evaluation_text = counted_rollout_call(0, eval_message)
+        evaluation_text = counted_rollout_call(0, eval_message, _m, _m_lock)
         if not evaluation_text:
             return 0
         eval_nodes = parse_nodes(evaluation_text)
         eval_final_answer = eval_nodes[-1] if eval_nodes else ""
         is_correct = counted_equiv_check(
-            eval_final_answer, ground_truth, check_answer=True
+            eval_final_answer, ground_truth, _m, _m_lock, check_answer=True
         )
         print("Is new rollout final answer correct:", is_correct)
         return 1 if is_correct else 0
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    # max_workers=2 matches OLLAMA_NUM_PARALLEL=2: sending more threads than Ollama's
+    # parallel capacity just queues requests and adds overhead without GPU benefit.
+    with ThreadPoolExecutor(max_workers=2) as executor:
         y_values = list(executor.map(single_rollout, range(reasoning_attempts)))
 
     return sum(y_values) / len(y_values) if y_values else 0.0
@@ -237,7 +257,9 @@ def update_chain_if_needed(
     threshold: float,
     reasoning_attempts: int,
     do_type: int,
-    alter_attempts: int
+    alter_attempts: int,
+    _m: dict,
+    _m_lock: threading.Lock,
 ):
     """
     Attempts to intervene on a specific node (at index i) if beneficial.
@@ -251,59 +273,41 @@ def update_chain_if_needed(
     print("Context so far:", context_steps)
     print("Current step:", current_step)
 
-    # Generate initial replacement text
-    replacement_text = generate_replacement_step(query, context_steps, current_step, do_type)
+    replacement_text = generate_replacement_step(query, context_steps, current_step, do_type, _m, _m_lock)
 
-    # Ensure the replacement text is different from the original step
     replacement_steps = ensure_different_step(
-        query, replacement_text, current_step, context_steps, alter_attempts, do_type
+        query, replacement_text, current_step, context_steps, alter_attempts, do_type, _m, _m_lock
     )
     if not replacement_steps:
         print('Skipping node, PN is None')
         print(f"Skipping PN estimation and further processing for step {i}")
-        # Skip this node and move to the next one without evaluating its PN
         i += 1
-        return nodes, i, None  # Returning None to indicate this step is skipped
+        return nodes, i, None
     else:
-        # Evaluate the replacement step over multiple forward passes
         candidate_step = replacement_steps[0] if replacement_steps else ""
         average_y = evaluate_replacement_step(
             query,
             context_steps,
             candidate_step,
             ground_truth,
-            reasoning_attempts
+            reasoning_attempts,
+            _m,
+            _m_lock,
         )
         pn = 1 - average_y
         print(f"PN value for step {i}: {pn}")
 
-    # If PN is below threshold, we intervene (replace) from this step onward
+    # Bug fix: paper Algorithm 1 says "Skip st" (remove it) when PN < threshold.
+    # The old code replaced the ENTIRE remaining chain with a fresh rollout, causing
+    # chain collapse: thinking=False model outputs just the boxed answer in one step,
+    # so len(nodes) drops to 1 and the while loop exits after a single PN measurement.
+    # Now we simply drop step i and let remaining original steps slide into position.
     if pn < threshold:
-        print(f"PN < {threshold}, updating chain from step {i} onward...")
-        # Re-run a final pass with the best candidate step to get its chain
-        best_replacement_text = candidate_step
-        best_eval_message = [
-            {
-                "role": "system",
-                "content": total_prompt
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Question:\n{query}\n\n"
-                    "Current reasoning steps:\n"
-                    + '\n\n'.join(context_steps + [best_replacement_text])
-                )
-            }
-        ]
-        best_evaluation_text = counted_rollout_call(0, best_eval_message)
-        best_eval_nodes = parse_nodes(best_evaluation_text)
-
-        # Replace from current step onward and stop — paper Algorithm 1 stops after first replacement
-        nodes = context_steps + best_eval_nodes
-        i = len(nodes)  # Exit the while loop; replacement chain is final
+        print(f"PN < {threshold}, pruning step {i} (removing from chain)...")
+        nodes = nodes[:i] + nodes[i+1:]
+        # Do NOT increment i — the next original step is now at position i.
     else:
-        # Otherwise, just move on
+        # Step is necessary; keep it and advance.
         i += 1
 
     return nodes, i, pn
@@ -313,8 +317,8 @@ def calculate_ps_pn(
     query: str,
     response: str,
     ground_truth: str,
-    threshold: float = 0.3,
-    reasoning_attempts: int = 3,
+    threshold: float = 0.5,
+    reasoning_attempts: int = 5,
     do_type: int = 0,
     alter_attempts: int = 5
 ) -> Dict[str, Any]:
@@ -325,14 +329,11 @@ def calculate_ps_pn(
     - Token length, step length, etc.
     - Also collects counts of rollouts and equivalence checks.
     """
-    # Reset metrics counters each time we call
-    rollout_metrics["total_rollout_calls"] = 0
-    rollout_metrics["equiv_check_calls"] = 0
-    rollout_metrics["rollout_prompt_intervention_count"] = 0
-    rollout_metrics["rollout_direct_count"] = 0
+    _m = _new_metrics()
+    _m_lock = threading.Lock()
 
     # 1. Get original metrics from the chain-of-thought
-    original_metrics = get_original_metrics(response, ground_truth)
+    original_metrics = get_original_metrics(response, ground_truth, _m, _m_lock)
 
     # 2. Parse the chain into nodes
     nodes = parse_nodes(response)
@@ -354,17 +355,21 @@ def calculate_ps_pn(
                 "step_length": original_metrics["original_step_length"],
                 "final_chain": nodes,
                 "pn_per_step": [],
-                "total_rollout_calls": rollout_metrics["total_rollout_calls"],
-                "equiv_check_calls": rollout_metrics["equiv_check_calls"],
+                "total_rollout_calls": _m["total_rollout_calls"],
+                "equiv_check_calls": _m["equiv_check_calls"],
                 "rollout_prompt_intervention_count": 0,
                 "rollout_direct_count": 0,
             }
 
     # 3. Intervene on each node
+    # Skip the last step: it contains the final answer. Any alternative that also
+    # states the correct answer gives average_y≈1 → PN≈0 → it gets pruned →
+    # chain ends with no answer → revert to original (no reduction ever happens).
+    # The last step is always necessary by definition, so we never prune it.
 
     i = 0
     pn_values = []
-    while i < len(nodes):
+    while i < len(nodes) - 1:  # stop before final answer step
         nodes, i, pn = update_chain_if_needed(
             query=query,
             nodes=nodes,
@@ -373,7 +378,9 @@ def calculate_ps_pn(
             threshold=threshold,
             reasoning_attempts=reasoning_attempts,
             do_type=do_type,
-            alter_attempts=alter_attempts
+            alter_attempts=alter_attempts,
+            _m=_m,
+            _m_lock=_m_lock,
         )
         # Only append pn if it's not None
         if pn is not None:
@@ -381,7 +388,7 @@ def calculate_ps_pn(
 
     # 4. After all possible interventions, compute final metrics
     final_answer = nodes[-1] if nodes else ""
-    ps = 1 if counted_equiv_check(final_answer, ground_truth,check_answer=True) else 0
+    ps = 1 if counted_equiv_check(final_answer, ground_truth, _m, _m_lock, check_answer=True) else 0
     print("Is final CoT correct (PS):", ps)
 
     # If optimization broke a previously correct chain, revert to original
@@ -410,10 +417,10 @@ def calculate_ps_pn(
         "pn_per_step": pn_values,
 
         # New counters
-        "total_rollout_calls": rollout_metrics["total_rollout_calls"],
-        "equiv_check_calls": rollout_metrics["equiv_check_calls"],
-        "rollout_prompt_intervention_count": rollout_metrics["rollout_prompt_intervention_count"],
-        "rollout_direct_count": rollout_metrics["rollout_direct_count"],
+        "total_rollout_calls": _m["total_rollout_calls"],
+        "equiv_check_calls": _m["equiv_check_calls"],
+        "rollout_prompt_intervention_count": _m["rollout_prompt_intervention_count"],
+        "rollout_direct_count": _m["rollout_direct_count"],
     }
 
     return results
@@ -440,28 +447,28 @@ def check_and_intervene(
     print("Context so far:", context_steps)
     print("Current step:", current_step)
 
-    # Generate initial replacement text
-    replacement_text = generate_replacement_step(query, context_steps, current_step, do_type)
+    _m_legacy = _new_metrics()
+    _ml_lock = threading.Lock()
+    replacement_text = generate_replacement_step(query, context_steps, current_step, do_type, _m_legacy, _ml_lock)
 
-    # Ensure the replacement text is different from the original step
     replacement_steps = ensure_different_step(
-        query, replacement_text, current_step, context_steps, alter_attempts, do_type
+        query, replacement_text, current_step, context_steps, alter_attempts, do_type, _m_legacy, _ml_lock
     )
     if not replacement_steps:
         print('Skipping node, PN is None')
         print(f"Skipping PN estimation and further processing for step {i}")
-        # Skip this node and move to the next one without evaluating its PN
         i += 1
-        return nodes, i, None  # Returning None to indicate this step is skipped
+        return nodes, i, None
     else:
-        # Evaluate the replacement step over multiple forward passes
         candidate_step = replacement_steps[0] if replacement_steps else ""
         average_y = evaluate_replacement_step(
             query,
             context_steps,
             candidate_step,
             ground_truth,
-            reasoning_attempts
+            reasoning_attempts,
+            _m_legacy,
+            _ml_lock,
         )
         pn = 1 - average_y
         print(f"PN value for step {i}: {pn}")
@@ -478,8 +485,10 @@ def test_original_metrics(
     do_type: int = 0,
     alter_attempts: int = 5)-> Dict[str, Any]:
     
-    original_metrics = get_original_metrics(response, ground_truth)
-    
+    _m_t = _new_metrics()
+    _mt_lock = threading.Lock()
+    original_metrics = get_original_metrics(response, ground_truth, _m_t, _mt_lock)
+
     # Parse the chain into nodes
     nodes = parse_nodes(response)
     pprint.pprint(nodes)

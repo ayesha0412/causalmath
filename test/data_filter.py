@@ -1,15 +1,15 @@
 import json
 
-# 定义函数来筛选符合条件的 JSON 数据
+# Define function to filter JSON data according to conditions
 def filter_jsonl_data(input_file, output_file):
 
     with open(input_file, 'r', encoding='utf-8') as infile:
 
         filtered_data = []
         
-        # 逐行读取 JSONL 文件
+        # Read JSONL file line by line
         for line in infile:
-            item = json.loads(line.strip())  # 解析每行 JSON 数据
+            item = json.loads(line.strip())  # Parse each line of JSON data
             
             original_token_length = item.get('metrics', {}).get('original_token_length', 0)
             token_length = item.get('metrics', {}).get('token_length', 0)

@@ -84,14 +84,14 @@ def main():
     error_file = output_file.replace(".jsonl", "_errors.jsonl")
     log_file = output_file.replace(".jsonl", "_log.txt")
 
-    # 日志文件初始化
+    # Initialize log file
     log = open(log_file, "a", encoding="utf-8")
-    log.write(f"\n====== 处理开始 {time.ctime()} ======\n")
-    log.write(f"读取自：{input_file}\n输出至：{output_file}（mode={mode}）\n错误记录：{error_file}\n\n")
+    log.write(f"\n====== Processing started {time.ctime()} ======\n")
+    log.write(f"Reading from: {input_file}\nOutput to: {output_file} (mode={mode})\nError log: {error_file}\n\n")
 
-    print(f"{Fore.BLUE}📂 输入文件：{input_file}")
-    print(f"{Fore.BLUE}📄 输出文件：{output_file}（{'追加' if append_mode else '覆盖'}）")
-    print(f"{Fore.BLUE}⚙️ 开始处理，跳过前 {lines_processed} 行，每批处理 {batch_size} 行\n")
+    print(f"{Fore.BLUE}📂 Input file: {input_file}")
+    print(f"{Fore.BLUE}📄 Output file: {output_file} ({'append' if append_mode else 'overwrite'})")
+    print(f"{Fore.BLUE}⚙️ Starting processing, skipping first {lines_processed} lines, processing {batch_size} lines per batch\n")
 
     start_time = time.time()
 
@@ -105,7 +105,7 @@ def main():
         line_num = lines_processed
         eof = False
 
-        pbar = tqdm(desc="🚀 正在处理", unit="行", ncols=80)
+        pbar = tqdm(desc="🚀 Processing", unit="lines", ncols=80)
 
         while not eof:
             batch = []
@@ -120,15 +120,15 @@ def main():
                 line_num += 1
                 try:
                     result = get_metrics_for_line(line, prompt_based)
-                    print("写入内容为：", result)
+                    print("Writing content: ", result)
                     f_out.write(json.dumps(result, ensure_ascii=False) + "\n")
-                    f_out.flush()  # 添加这一行立即刷新
-                    print(f"{Fore.GREEN}✅ 成功写入第 {line_num} 行{Style.RESET_ALL}")
+                    f_out.flush()  # Flush immediately
+                    print(f"{Fore.GREEN}✅ Successfully wrote line {line_num}{Style.RESET_ALL}")
                     log.write(f"[OK] Line {line_num} written.\n")
                 except Exception as e:
                     f_err.write(line.strip() + "\n")
-                    f_err.flush()  # 如果需要错误文件也立即刷新，可以加这里
-                    print(f"{Fore.RED}❌ 第 {line_num} 行处理失败：{e}{Style.RESET_ALL}")
+                    f_err.flush()  # Flush error file immediately if needed
+                    print(f"{Fore.RED}❌ Line {line_num} processing failed: {e}{Style.RESET_ALL}")
                     log.write(f"[ERR] Line {line_num} failed: {e}\n")
                 
                 pbar.update(1)
@@ -136,9 +136,9 @@ def main():
         pbar.close()
 
     elapsed = time.time() - start_time
-    print(f"\n{Fore.GREEN}🎉 全部处理完成！共处理 {line_num - lines_processed} 行，耗时 {elapsed:.2f} 秒。{Style.RESET_ALL}")
-    log.write(f"\n✅ 全部完成，共 {line_num - lines_processed} 行，耗时 {elapsed:.2f} 秒。\n")
-    log.write(f"====== 处理结束 {time.ctime()} ======\n")
+    print(f"\n{Fore.GREEN}🎉 All processing completed! Total {line_num - lines_processed} lines processed, took {elapsed:.2f} seconds.{Style.RESET_ALL}")
+    log.write(f"\n✅ All complete, total {line_num - lines_processed} lines, took {elapsed:.2f} seconds.\n")
+    log.write(f"====== Processing ended {time.ctime()} ======\n")
     log.close()
 
 if __name__ == "__main__":
