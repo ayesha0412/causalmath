@@ -1,6 +1,6 @@
 import json
 
-# 输入和输出文件路径
+# Input and output file paths
 input_file = 'data/COMMONSENCEQA/qwen_commonsenseqa_after_pn_np.jsonl'
 output_file = 'data/COMMONSENCEQA/qwen_commonsenseqa_after_pn_np_indexed.jsonl'
 
@@ -19,14 +19,14 @@ try:
         except json.JSONDecodeError:
             print(f"Error decoding line {index}: {line}")
 
-    # 将更新后的数据写入输出文件
+    # Write updated data to output file
     with open(output_file, 'w', encoding='utf-8') as f_out:
         f_out.writelines(new_lines)
 
-    print(f"处理完成，结果已保存到 {output_file}")
+    print(f"Processing complete, results saved to {output_file}")
 
 except FileNotFoundError:
-    print(f"错误: 未找到文件 {input_file}")
+    print(f"Error: File not found {input_file}")
 except Exception as e:
-    print(f"发生未知错误: {e}")
+    print(f"Unknown error occurred: {e}")
     
