@@ -1,0 +1,6 @@
+method,model,dataset,tokens,steps,accuracy,n
+standard_cot,qwen3-8b,math500,3136.08,23.14,87.20,500
+fast_solve,qwen3-8b,math500,2290.08,11.66,89.20,500
+reduction,qwen3-8b,math500,2455.58,14.28,88.20,500
+cod,qwen3-8b,math500,1903.41,4.25,88.20,500
+ours_icl,qwen3-8b,math500,2794.59,19.22,88.00,500
