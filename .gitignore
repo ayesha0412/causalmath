@@ -1,7 +1,37 @@
 __pycache__/
 *.pyc
-*.log
 *.tmp
 .DS_Store
-data/
 .env
+
+# Model checkpoints and adapters (too large for GitHub)
+models/
+*.pth
+*.pt
+*.bin
+*.safetensors
+checkpoint-*/
+adapter_*/
+merged_model/
+unsloth_compiled_cache/
+
+# Training logs and cache
+*.log
+.cache/
+cache/
+huggingface/
+.huggingface/
+
+# Large data files - exclude raw source data
+*.jsonl
+data/sft/
+data/dpo/
+data/gsm8k/
+data/MATH-500/
+data/commonsenseqa/
+
+# Allow results (small, needed for paper)
+!data/results_sft/fast/*.jsonl
+
+# Logs
+logs/
