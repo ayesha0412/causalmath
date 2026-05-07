@@ -24,11 +24,14 @@ huggingface/
 
 # Large data files - exclude raw source data
 *.jsonl
-data/sft/
 data/dpo/
 data/gsm8k/
 data/MATH-500/
 data/commonsenseqa/
+
+# Allow SFT training data
+!data/sft/fast/causal_train.jsonl
+!data/sft/fast/noncausal_train.jsonl
 
 # Allow results (small, needed for paper)
 !data/results_sft/fast/*.jsonl
