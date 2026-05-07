@@ -36,5 +36,5 @@ data/commonsenseqa/
 # Allow results (small, needed for paper)
 !data/results_sft/fast/*.jsonl
 
-# Logs
-logs/
+# Logs - allow SFT/DPO logs for supervisor
+# logs/

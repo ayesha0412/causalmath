@@ -1,0 +1,30 @@
+﻿# SFT Fast Pipeline - Data Manifest
+# Generated: 2026-05-06_02-44
+
+## Training Data
+- Causal:    data/sft/fast/causal_train.jsonl
+  - GSM8K: 1100 (PNS, PS=1 filter)
+  - MATH:   346 (PNS, PS=1 filter, from 400-example training split)
+  - Total: 1446
+
+- Noncausal: data/sft/fast/noncausal_train.jsonl
+  - GSM8K: 1210 (115 new Qwen3-14B + 1100 COT)
+  - MATH:   397 (COT from 400-example training split)
+  - Total: 1607
+
+## Test Data (NO overlap with training)
+- GSM8K:    data/gsm8k/test_gsm8k_heldout.jsonl (136 held-out, zero overlap)
+- MATH-500: data/MATH-500/test_math500_heldout.jsonl (100 held-out examples)
+
+## Sources
+- GSM8K PNS:  data/gsm8k/gsm8k_pns_qwen3-14b-thinking-v2.jsonl
+- GSM8K COT:  data/gsm8k/gsm8k_cot_qwen3-14b-thinking-v2.jsonl
+- GSM8K NEW:  data/gsm8k/gsm8k_cot_train_detailed.jsonl (Qwen3-14B, new)
+- MATH PNS:   data/MATH-500/math500_pns_qwen3-v2-pb-fixed.jsonl
+- MATH COT:   data/MATH-500/test_math500_answered_qwen3-14B-thinking-v2.jsonl
+- MATH split: data/MATH-500/train_math500_split.jsonl (400 training questions)
+
+## Model
+- Base: Qwen/Qwen3-1.7B
+- LoRA r=16, alpha=32, target=q_proj+v_proj
+- Epochs: 3, batch_size: 2, grad_accum: 4, lr: 2e-4
