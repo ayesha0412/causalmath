@@ -112,8 +112,7 @@ def main():
         learning_rate          = args.lr,
         beta                   = args.beta,
         max_length             = args.max_seq_len,
-        max_prompt_length      = 512,
-        logging_steps          = 10,
+        logging_steps          = 20,
         save_steps             = 100,
         save_total_limit       = 2,
         bf16                   = True,
@@ -121,11 +120,18 @@ def main():
     )
 
     trainer = DPOTrainer(
-        model     = model,
-        args      = dpo_config,
-        train_dataset = dataset,
-        tokenizer = tokenizer,
+        model            = model,
+        args             = dpo_config,
+        train_dataset    = dataset,
+        processing_class = tokenizer,
     )
+
+    # Fix version mismatch: newer transformers calls log(logs, start_time)
+    # but older TRL DPOTrainer.log() only accepts log(logs)
+    _orig_log = trainer.log
+    def _patched_log(logs, start_time=None):
+        return _orig_log(logs)
+    trainer.log = _patched_log
 
     print(f"\n{'='*70}")
     print(f"DPO Training: SFT-Causal -> DPO-Causal")
@@ -134,7 +140,13 @@ def main():
     print(f"{'='*70}\n")
 
     trainer.train()
-    model.save_pretrained(args.output_dir)
+
+    # Merge DPO LoRA into the (already SFT-merged) base and save full weights.
+    # Saving only the LoRA adapter loses the SFT merge — loading would apply
+    # DPO LoRA on top of raw base, not on top of the SFT-merged model.
+    print("Merging DPO LoRA into model and saving full weights...")
+    merged = model.merge_and_unload()
+    merged.save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
 
     print(f"\nDPO training complete! Saved to: {args.output_dir}")
