@@ -35,6 +35,35 @@ data/commonsenseqa/
 
 # Allow results (small, needed for paper)
 !data/results_sft/fast/*.jsonl
+!data/results_sft/distill/*.jsonl
+
+# Allow DPO training pairs (curated, needed for reproducibility)
+!data/dpo/dpo_pairs_v3.jsonl
+!data/dpo/dpo_pairs_gsm8k.jsonl
+!data/dpo/dpo_pairs_combined.jsonl
+!data/dpo/dpo_pairs_causal_v2.jsonl
+!data/dpo/gsm8k_causal_train.jsonl
+!data/dpo/rejected_chains_gsm8k.jsonl
+!data/dpo/detailed_pns.jsonl
+!data/dpo/sample10.jsonl
+
+# Allow self-distillation training data
+!data/self_distill/causal_300.jsonl
+!data/self_distill/seed_hard100.jsonl
+!data/self_distill/seed_hard250.jsonl
+!data/self_distill/noncausal_messages.jsonl
+!data/self_distill/iter1/*.jsonl
+!data/self_distill/iter2/*.jsonl
+
+# Allow all files in Self_distill/ directory
+!Self_distill/
+!Self_distill/**
+!Self_distill/**/*.jsonl
+!Self_distill/**/*.log
+!Self_distill/**/*.csv
+!Self_distill/**/*.md
+!Self_distill/**/*.py
+!Self_distill/**/*.json
 
 # Logs - allow SFT/DPO logs for supervisor
 # logs/

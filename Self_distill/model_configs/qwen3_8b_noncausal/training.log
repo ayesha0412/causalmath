@@ -1,0 +1,72 @@
+========================================================================
+SFT TRAINING LOG (train_correct.py)
+========================================================================
+  Run name   : sft_run
+  Condition  : noncausal
+  Model      : Qwen/Qwen3-8B
+  Data       : data/self_distill/noncausal_messages.jsonl
+  Output     : models/distill/qwen3_8b_noncausal
+  Started    : 2026-05-12 10:05:47
+========================================================================
+HYPERPARAMETERS
+  LoRA r/alpha    : 16/32
+  Max seq len     : 512
+  Epochs          : 2
+  Batch (eff)     : 1 x 8 = 8
+  LR / scheduler  : 0.0002 / cosine
+  Label masking   : YES (prompt tokens -> -100)
+========================================================================
+Loading tokenizer: Qwen/Qwen3-8B
+  Vocab: 151643  Pad: '<|endoftext|>'
+Loading data: data/self_distill/noncausal_messages.jsonl
+  Raw records: 931
+Tokenizing with label masking...
+  Tokenized: 930  Skipped: 1
+  Seq len  — mean: 266  max: 512
+  Trainable tokens — mean: 200  min: 79
+
+  [SAMPLE full text (first 400 chars)]:
+  "<|im_start|>user\nJohn drives to his friend's house 200 miles away.  He drives at a speed of 70 mph.  He had to take a detour that added 10 miles to his trip.  After he gets there he takes a route home that is 240 miles but he goes 80 mph.  How long did the trip take?<|im_end|>\n<|im_start|>assistant\n<think>\nTo determine the total time John spent on his trip, we calculate the time for each leg of th"
+  [SAMPLE response target (first 300 chars)]:
+  "<think>\nTo determine the total time John spent on his trip, we calculate the time for each leg of the journey separately and then sum them.\n\n---\n\n### **Trip to Friend's House**\n\n- **Distance**: Original distance = 200 miles  \n  Detour adds = 10 miles  \n  **Total distance** = 200 + 10 = 210 miles  \n-"
+
+Loading model (4-bit QLoRA): Qwen/Qwen3-8B
+  VRAM after model load: 7.98 GB
+  LoRA trainable: 43,646,976 / 8,234,382,336 (0.53%)
+========================================================================
+TRAINING STARTED
+========================================================================
+TRAINING COMPLETE
+  Duration     : 1h 57m 25s
+  Train loss   : 0.1404
+  Total steps  : 234
+  Peak VRAM    : 10.96 GB
+
+LOSS HISTORY:
+  step=   10  loss=0.4320  lr=1.64e-04
+  step=   20  loss=0.2150  lr=1.99e-04
+  step=   30  loss=0.1719  lr=1.97e-04
+  step=   40  loss=0.1630  lr=1.92e-04
+  step=   50  loss=0.1572  lr=1.86e-04
+  step=   60  loss=0.1520  lr=1.78e-04
+  step=   70  loss=0.1601  lr=1.68e-04
+  step=   80  loss=0.1483  lr=1.58e-04
+  step=   90  loss=0.1522  lr=1.45e-04
+  step=  100  loss=0.1436  lr=1.33e-04
+  step=  110  loss=0.1528  lr=1.19e-04
+  step=  120  loss=0.1339  lr=1.05e-04
+  step=  130  loss=0.1038  lr=9.09e-05
+  step=  140  loss=0.0988  lr=7.70e-05
+  step=  150  loss=0.0986  lr=6.35e-05
+  step=  160  loss=0.0959  lr=5.08e-05
+  step=  170  loss=0.0922  lr=3.91e-05
+  step=  180  loss=0.0986  lr=2.85e-05
+  step=  190  loss=0.1045  lr=1.94e-05
+  step=  200  loss=0.0951  lr=1.19e-05
+  step=  210  loss=0.0964  lr=6.14e-06
+  step=  220  loss=0.0959  lr=2.22e-06
+  step=  230  loss=0.0878  lr=2.48e-07
+========================================================================
+Adapter   -> models/distill/qwen3_8b_noncausal
+Log       -> models/distill/qwen3_8b_noncausal\training.log
+Config    -> models/distill/qwen3_8b_noncausal/run_config.json

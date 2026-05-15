@@ -1,0 +1,56 @@
+========================================================================
+SFT TRAINING LOG (train_correct.py)
+========================================================================
+  Run name   : sft_iter2
+  Condition  : causal
+  Model      : Qwen/Qwen3-8B
+  Data       : data/self_distill/causal_300.jsonl
+  Output     : models/distill/qwen3_8b_iter2
+  Started    : 2026-05-15 12:54:14
+========================================================================
+HYPERPARAMETERS
+  LoRA r/alpha    : 16/32
+  Max seq len     : 2048
+  Epochs          : 2
+  Batch (eff)     : 1 x 8 = 8
+  LR / scheduler  : 0.0001 / cosine
+  Label masking   : YES (prompt tokens -> -100)
+========================================================================
+Loading tokenizer: Qwen/Qwen3-8B
+  Vocab: 151643  Pad: '<|endoftext|>'
+Loading data: data/self_distill/causal_300.jsonl
+  Raw records: 300
+Tokenizing with label masking...
+  Tokenized: 300  Skipped: 0
+  Seq len  — mean: 160  max: 376
+  Trainable tokens — mean: 92  min: 13
+
+  [SAMPLE full text (first 400 chars)]:
+  '<|im_start|>user\nCarmen has $100, Samantha has $25 more than Carmen, and Daisy has $50 more than Samantha. How much do all three girls have combined?<|im_end|>\n<|im_start|>assistant\n<think>\nCarmen has $100. Samantha has $25 more than Carmen:  \n$$\n100 + 25 = 125\n$$  \nDaisy has $50 more than Samantha:  \n$$\n125 + 50 = 175\n$$  \nCombined total:  \n$$\n100 + 125 + 175 = 400\n$$\n</think>\n\n$$\n\\boxed{400}\n$$<'
+  [SAMPLE response target (first 300 chars)]:
+  '<think>\nCarmen has $100. Samantha has $25 more than Carmen:  \n$$\n100 + 25 = 125\n$$  \nDaisy has $50 more than Samantha:  \n$$\n125 + 50 = 175\n$$  \nCombined total:  \n$$\n100 + 125 + 175 = 400\n$$\n</think>\n\n$$\n\\boxed{400}\n$$<|im_end|>'
+
+Loading model (4-bit QLoRA): Qwen/Qwen3-8B
+  VRAM after model load: 7.98 GB
+  LoRA trainable: 43,646,976 / 8,234,382,336 (0.53%)
+========================================================================
+TRAINING STARTED
+========================================================================
+TRAINING COMPLETE
+  Duration     : 0h 5m 50s
+  Train loss   : 0.3080
+  Total steps  : 76
+  Peak VRAM    : 10.65 GB
+
+LOSS HISTORY:
+  step=   10  loss=0.7884  lr=9.83e-05
+  step=   20  loss=0.3258  lr=8.86e-05
+  step=   30  loss=0.2463  lr=7.18e-05
+  step=   40  loss=0.2347  lr=5.11e-05
+  step=   50  loss=0.2336  lr=3.01e-05
+  step=   60  loss=0.2128  lr=1.28e-05
+  step=   70  loss=0.1910  lr=2.25e-06
+========================================================================
+Adapter   -> models/distill/qwen3_8b_iter2
+Log       -> models/distill/qwen3_8b_iter2\training.log
+Config    -> models/distill/qwen3_8b_iter2/run_config.json
