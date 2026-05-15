@@ -1,0 +1,35 @@
+{
+  "model": "Qwen/Qwen3-1.7B",
+  "condition": "noncausal_sft",
+  "description": "Qwen3-1.7B fine-tuned on raw Qwen3-14B CoT chains (no PNS filtering). Serves as the SFT baseline against which the causal PNS-guided model is compared.",
+  "adapter_path": "models/sft/qwen3_fast_noncausal",
+  "final_checkpoint": "checkpoint-603",
+  "training": {
+    "epochs": 3,
+    "batch_size": 4,
+    "grad_accum": 4,
+    "lr": 5e-4,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "max_seq_len": 1024,
+    "training_examples": 1100,
+    "data_source": "Qwen3-14B raw CoT chains (no PNS filter)"
+  },
+  "results": {
+    "gsm8k": {
+      "accuracy": 0.8309,
+      "correct": 1096,
+      "total": 1319,
+      "avg_tokens": 220.9,
+      "avg_steps": 3.5
+    },
+    "math500": {
+      "accuracy": 0.6660,
+      "correct": 333,
+      "total": 500,
+      "avg_tokens": 738.3,
+      "avg_steps": 17.3
+    }
+  },
+  "paper_reference": "Table VI — Ours Noncausal (Q3-1.7B)"
+}

@@ -1,0 +1,37 @@
+{
+  "model": "Qwen/Qwen3-1.7B",
+  "condition": "causal_sft",
+  "description": "Qwen3-1.7B fine-tuned on PNS-filtered Qwen3-14B CoT chains. Only causally necessary steps (PS=1, PNS>0.5) are retained. Produces more concise reasoning with 52.1 fewer tokens per response than the noncausal baseline.",
+  "adapter_path": "models/sft/qwen3_fast_causal",
+  "final_checkpoint": "checkpoint-543",
+  "training": {
+    "epochs": 3,
+    "batch_size": 4,
+    "grad_accum": 4,
+    "lr": 5e-4,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "max_seq_len": 1024,
+    "training_examples": 1100,
+    "data_source": "Qwen3-14B PNS-filtered chains (PS=1, alpha=0.5, k=3 rollouts)"
+  },
+  "results": {
+    "gsm8k": {
+      "accuracy": 0.7726,
+      "correct": 1019,
+      "total": 1319,
+      "avg_tokens": 168.8,
+      "avg_steps": 1.0,
+      "token_reduction_vs_noncausal": "23.6%"
+    },
+    "math500": {
+      "accuracy": 0.5760,
+      "correct": 288,
+      "total": 500,
+      "avg_tokens": 950.6,
+      "avg_steps": 1.0
+    }
+  },
+  "key_finding": "PNS-pruned training data produces measurably more concise generation: 52.1 fewer tokens per response on GSM-8k versus noncausal SFT, confirming that causal step selection transfers from training data to inference behaviour.",
+  "paper_reference": "Table VI — Ours Causal (Q3-1.7B)"
+}

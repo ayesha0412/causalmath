@@ -58,6 +58,14 @@ data/commonsenseqa/
 # Allow all files in Self_distill/ directory
 !Self_distill/
 !Self_distill/**
+
+# Allow all files in DPO_2/ directory
+!DPO_2/
+!DPO_2/**
+
+# Allow all files in DPO/ directory
+!DPO/
+!DPO/**
 !Self_distill/**/*.jsonl
 !Self_distill/**/*.log
 !Self_distill/**/*.csv

@@ -1,0 +1,6 @@
+condition,accuracy_pct,correct,total,avg_tokens
+causal_sft_baseline,77.26,1019,1319,168.8
+dpo_v4_final,75.06,990,1319,172.0
+dpo_v3_intermediate,76.14,1576,2070,168.4
+dpo_v2_failed,67.1,773,1152,1802.1
+dpo_v1_early,71.82,632,880,3824.7
