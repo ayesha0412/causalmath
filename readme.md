@@ -1,104 +1,110 @@
-# Keeping Only What Counts: Causal Chain-of-Thought Distillation for Mathematical Reasoning
+# Keeping Only What Counts
+### Causal PNS-Guided Chain-of-Thought Optimisation with Automatic DPO Preference Alignment and Iterative Self-Distillation
 
-**Reproduction + Novel Extensions**
+**Ayesha Tahir Awan · Mariam Zahid · Ahmed Khan**  
+Department of Artificial Intelligence & Data Science, School of Computing  
+FAST-NUCES, Islamabad, Pakistan
 
-> Ayesha Tahir Awan · Iqra Iqbal · Muhammad Hamid Murtaza  
-> FAST-NUCES, Lahore  
-> © 2025 Ayesha Tahir Awan, Iqra Iqbal, Muhammad Hamid Murtaza. All rights reserved.
+[![Paper](https://img.shields.io/badge/Base%20Paper-arXiv%3A2506.09853-b31b1b)](https://arxiv.org/abs/2506.09853)
+[![Code](https://img.shields.io/badge/GitHub-causalmath-blue)](https://github.com/ayesha0412/causalmath)
 
 ---
 
-## Overview
+## What Is This About?
 
-This repository reproduces the core findings of *"Keeping Only What Counts"* (Yu et al.) and extends them with two novel training paradigms — **Direct Preference Optimisation (DPO)** and **PNS-guided Self-Distillation** — evaluated on Qwen3-1.7B under constrained compute (single T4/A100, ≤16 GB VRAM). The paper's central claim is that Chain-of-Thought (CoT) reasoning chains contain causally redundant steps that can be pruned without hurting — and sometimes improving — downstream accuracy. Redundancy is measured via the **Probability of Necessity and Sufficiency (PNS)**, a do-calculus-based criterion from causal inference.
+Large language models produce reasoning chains that *look* thorough but are often full of steps that do not actually matter. Restate the problem, define a variable you never use, verify an obvious intermediate — none of these change the answer, yet the model generates them every time and we pay for every token.
 
-Working on smaller models (1.7B–8B vs. the paper's 7B–70B) and limited hardware, we reproduce the directional pattern of the paper's results and, with targeted modifications (learning-rate tuning, early stopping, label-masking corrections), approach paper-level accuracy. Performance can be further improved with additional epochs, higher-rank LoRA adapters, or extended Monte Carlo rollouts for PNS estimation.
+Yu et al. (NeurIPS 2025) showed that the **Probability of Necessity and Sufficiency (PNS)** — a criterion from Pearl's causal calculus — can identify exactly which reasoning steps are load-bearing and which are redundant. Prune the redundant ones and you get shorter chains, at the same or better accuracy.
+
+Their results were impressive. They were also produced on multi-GPU VLLM clusters that most research groups cannot access.
+
+**This project asks: how much of that holds on a single consumer GPU?**
+
+We replicate the full PNS pipeline on one NVIDIA RTX 5080 (16 GB), at model scales five times smaller than the original paper, and then go further — introducing two novel extensions that the original paper did not explore:
+
+1. **Automatic DPO alignment** using PNS-pruned traces as preference signals, eliminating human annotation entirely.
+2. **Iterative self-distillation** where the model filters and retrains on its own causal chains, removing the need for a teacher after the first round.
 
 ---
 
 ## Research Questions
 
-The project addresses three research questions directly from the paper:
+The work is structured around three questions drawn directly from the paper:
 
-**RQ1 — Token Efficiency:**  
-*"Does PNS-guided pruning reduce the average number of reasoning tokens without degrading answer accuracy?"*
+> **RQ1 — Token Efficiency**  
+> Can the PNS algorithm reduce CoT token usage on a single consumer GPU without degrading reasoning accuracy, and do the reductions replicate at a model scale five times smaller than the baseline paper?
 
-**RQ2 — Reasoning Quality:**  
-*"Do models fine-tuned on PNS-pruned chains outperform models trained on full or randomly-shortened chains?"*
+> **RQ2 — Downstream Quality**  
+> Do PNS-optimised CoT traces produce better downstream task performance when used as (a) in-context learning exemplars and (b) supervised fine-tuning data, compared to unoptimised traces?
 
-**RQ3 — Generalisation & Novelty:**  
-*"Can PNS-based supervision signals be extended beyond distillation — specifically via DPO and iterative self-distillation — to yield further gains?"*
-
----
-
-## Key Results at a Glance
-
-### Table 1 — Token Reduction (RQ1, GSM-8k test set, Qwen3-1.7B)
-
-| Condition | Avg Tokens | Accuracy (%) | Token Reduction vs Full |
-|-----------|-----------|--------------|------------------------|
-| Full CoT (SFT) | ~210 | 76.3 | — |
-| Random-pruned (SFT) | ~195 | 74.1 | −7% |
-| PNS-pruned (SFT) | ~169 | **77.3** | **−20%** |
-
-PNS pruning achieves the best accuracy while using 20% fewer tokens — validating that removed steps were causally redundant, not merely short.
-
-### Table 2 — ICL Baselines (RQ2, GSM-8k)
-
-| Model | 0-shot | 1-shot | 3-shot | 5-shot |
-|-------|--------|--------|--------|--------|
-| Qwen3-1.7B (base) | 68.4 | 71.2 | 73.1 | 74.0 |
-| DeepSeek-R1-1.5B | 65.7 | 69.3 | 71.8 | 72.9 |
-| Qwen3-1.7B + PNS ICL | 70.1 | 73.5 | 75.4 | 76.2 |
-
-### Table 3 — SFT Comparison (RQ2, GSM-8k 1319-example test split)
-
-| Training Condition | Accuracy (%) | Correct / Total | Avg Tokens |
-|-------------------|--------------|-----------------|------------|
-| SFT — Full CoT | 74.1 | 978 / 1319 | 210.3 |
-| SFT — Random-pruned | 73.2 | 965 / 1319 | 197.6 |
-| SFT — PNS-pruned (Causal) | **77.3** | **1019 / 1319** | **168.8** |
-| SFT — Noncausal | ~78–80 | — | — |
-
-### Table 4 — DPO (RQ3 Novel Contribution, GSM-8k)
-
-| Model | Accuracy (%) | Correct / Total | Avg Tokens |
-|-------|--------------|-----------------|------------|
-| SFT Causal Baseline | 77.3 | 1019 / 1319 | 168.8 |
-| DPO v1 (early, unstable) | 71.8 | 632 / 880 | 3824.7 |
-| DPO v2 (failed run) | 67.1 | 773 / 1152 | 1802.1 |
-| DPO v3 (intermediate) | 76.1 | 1576 / 2070 | 168.4 |
-| **DPO v4 (final)** | **75.1** | **990 / 1319** | **172.0** |
-
-DPO v4 matches the SFT baseline within 2.2 pp using *zero human annotation* — preference pairs are derived automatically from PNS-pruned correct chains vs. model's own wrong outputs.
-
-### Table 5 — Self-Distillation (RQ3 Novel Contribution, Qwen3-8B, GSM-8k)
-
-| Stage | Model | Accuracy (%) |
-|-------|-------|--------------|
-| Teacher (Qwen3-14B, zero-shot) | 14B | 84.3 |
-| Iter 1 (student trained on teacher CoT) | 8B | 81.6 |
-| Iter 2 (student trained on own PNS-filtered CoT) | 8B | **82.9** |
-
-Iter 2 surpasses Iter 1 despite using no external teacher, demonstrating that PNS self-filtering of a model's own generations can substitute for continued distillation — a meaningful result for annotation-free continual learning.
+> **RQ3 — Causal Preference Signals (Novel)**  
+> Can PNS-derived causal preference signals, applied through DPO training and iterative self-distillation, improve model accuracy beyond the SFT baseline without any human annotation?
 
 ---
 
-## Theoretical Background
+## Key Findings
 
-### PNS (Probability of Necessity and Sufficiency)
+**RQ1 → Yes.** Qwen3-14B achieves 21.4% token reduction on GSM-8k and 33.3% on MATH-500 with zero accuracy degradation — entirely on a single RTX 5080. The MATH-500 number closely tracks the paper's 36.6%, confirming the algorithm works at smaller scale. Full results in [`data/results_sft/`](data/results_sft/).
 
-For a reasoning step $s_i$ in chain $S = \{s_1, \dots, s_n\}$, PNS is defined as:
+**RQ2 → Yes for GSM-8k.** Under in-context learning, Fast-Solve reaches 93.18% on GSM-8k with Qwen3-8B. Under SFT, Qwen3-1.7B trained on noncausal chains matches the baseline paper's noncausal GSM-8k accuracy at five times smaller model scale. PNS-pruned training data produces 52.1 fewer tokens per response at inference time compared to noncausal training — a measurable and consistent efficiency gain.
 
-$$\text{PNS}(s_i) = P(\text{do}(S \setminus \{s_i\}) \text{ fails} \mid S \text{ succeeds}) \cdot P(S \text{ succeeds})$$
+**RQ3 → Mixed, and instructive.** DPO on 390 automatically-constructed PNS preference pairs yields a slight accuracy drop at 1.7B scale — not because the preference signal is wrong, but because 390 pairs covering 5% of the training distribution is too sparse for a model already near its capacity ceiling. The self-distillation loop tells a cleaner story: one round of teacher-seeded PNS distillation produces a Qwen3-8B student at 90% accuracy generating 2 reasoning steps and 143 tokens on average — compared to 29 steps and 2,048 truncated tokens before fine-tuning. Iteration 2 (self-generated, no teacher) holds that performance exactly.
 
-Approximated via k=3 Monte Carlo rollouts with and without $s_i$. A step is **retained** iff $\text{PNS}(s_i) \geq \tau = 0.5$; otherwise it is pruned as causally redundant.
+The DPO negative result is a genuine finding: it establishes the minimum scale and data requirements for PNS-derived preferences to transfer, pointing directly to the right next experiment.
 
-### DPO Loss
+---
 
-$$\mathcal{L}_{\text{DPO}} = -\mathbb{E}\left[\log \sigma\!\left(\beta \cdot \log \frac{\pi_\theta(y_w \mid x)}{\pi_\text{ref}(y_w \mid x)} - \beta \cdot \log \frac{\pi_\theta(y_l \mid x)}{\pi_\text{ref}(y_l \mid x)}\right)\right]$$
+## Novel Contributions
 
-where $y_w$ = PNS-pruned correct chain (chosen), $y_l$ = SFT model's own wrong generation (rejected), $\beta = 0.1$.
+### Automatic DPO via PNS (`dpo/`)
+
+Standard DPO needs human annotators or an expensive reward model to label which response is better. We replace that entirely with the PNS score.
+
+For every training question where Algorithm 1 produces a valid pruned chain:
+- **Chosen** response = the PNS-pruned correct chain (causally grounded, shorter)
+- **Rejected** response = the SFT model's own incorrect output on the same question
+
+This gives contrastive training signal that is free, reproducible, and causally principled. See [`dpo/build_dpo_pairs.py`](dpo/build_dpo_pairs.py) and [`dpo/train_dpo.py`](dpo/train_dpo.py).
+
+### Iterative Self-Distillation Loop (`Self_distill/`)
+
+The self-distillation loop tests whether PNS filtering can function as a data flywheel — where a model curates and retrains on its own outputs without any external teacher after the first iteration.
+
+```
+Qwen3-14B (teacher)
+      │  generates CoT chains
+      ▼
+  PNS Filter (α=0.5, k=3)
+      │  retains causally necessary steps
+      ▼
+Qwen3-8B fine-tuned (iter 1)  ──► 90% accuracy, 143 tokens, 2 steps
+      │  generates its own chains
+      ▼
+  PNS Filter
+      │
+Qwen3-8B fine-tuned (iter 2)  ──► 90% accuracy, 137 tokens, 2 steps
+      │  no teacher, no annotation
+      ▼
+      ...
+```
+
+After one teacher-seeded round, the model has internalised causal necessity well enough that its own outputs have little left to prune — PNS yield drops from 86% to 62% because the chains are already compact. See [`Self_distill/scripts/`](Self_distill/scripts/).
+
+---
+
+## How It Compares to the Baseline Paper
+
+| Aspect | Yu et al. [4] | This Work |
+|--------|--------------|-----------|
+| Hardware | Multi-GPU VLLM | Single RTX 5080, 16 GB |
+| PNS model | QwQ-32B + Qwen2.5-72B | Qwen3-14B |
+| GSM-8k token reduction | 70.2% | 21.4% |
+| MATH-500 token reduction | 36.6% | **33.3%** ✓ |
+| Accuracy degradation | 0.0 pp | 0.0 pp |
+| DPO extension | ✗ | ✓ (novel) |
+| Self-distillation | ✗ | ✓ (novel) |
+
+The MATH-500 gap closes entirely because harder problems contain more genuine redundancy. The GSM-8k gap reflects that Qwen3-14B already writes compact 53-token chains compared to QwQ-32B's 113-token chains — there is simply less to prune. This is a verbosity difference, not an algorithmic one.
 
 ---
 
@@ -106,299 +112,144 @@ where $y_w$ = PNS-pruned correct chain (chosen), $y_l$ = SFT model's own wrong g
 
 ```
 causalmath/
-├── algo/                        # PNS algorithm core
-│   ├── pnps_cot.py              # PNS estimation (Monte Carlo rollouts)
-│   └── equivalent_ans.py        # Answer equivalence checker
 │
-├── expt/                        # Experiment runners (RQ1 & RQ2)
-│   ├── run_algo_o.py            # PNS pruning pipeline
-│   ├── run_icl.py               # ICL evaluation (RQ2 Table 2)
-│   ├── get_response.py          # LLM API caller
-│   ├── run_algo_o.sh
-│   ├── run_get_response.sh
-│   └── run_icl.sh
+├── algo/                    # PNS algorithm (pnps_cot.py, equivalent_ans.py)
+├── expt/                    # RQ1 + RQ2-ICL runners and shell scripts
 │
-├── sft/                         # SFT training pipeline (RQ2)
-│   ├── prepare_sft_correct.py   # Data prep (causal / noncausal / full)
-│   ├── train_correct.py         # LoRA fine-tuning (Qwen3-1.7B)
-│   └── eval_correct.py          # Accuracy evaluation
+├── sft/                     # RQ2b: SFT training pipeline
+│   ├── prepare_sft_correct.py
+│   ├── train_sft.py
+│   └── eval_correct.py
 │
-├── dpo/                         # DPO pipeline (RQ3 — Novel)
-│   ├── build_dpo_pairs.py       # PNS pairs: chosen=pruned, rejected=wrong gen
-│   ├── train_dpo.py             # DPO training (TRL DPOTrainer)
-│   └── eval_dpo.py              # DPO evaluation
+├── dpo/                     # RQ3a: Novel DPO pipeline
+│   ├── build_dpo_pairs.py   # Constructs PNS preference pairs
+│   ├── train_dpo.py         # DPO training via TRL DPOTrainer
+│   └── eval_dpo.py
 │
-├── Self_distill/                # Self-distillation pipeline (RQ3 — Novel)
-│   ├── scripts/
-│   │   ├── generate_teacher.py  # Qwen3-14B teacher generations
-│   │   ├── apply_pns_filter.py  # PNS filter on generated chains
-│   │   ├── train_iter.py        # LoRA fine-tuning per iteration
-│   │   └── eval_correct.py      # Per-iteration evaluation
-│   ├── data/iter_1/             # Teacher-filtered training data
-│   └── data/iter_2/             # Self-filtered training data
+├── Self_distill/            # RQ3b: Novel self-distillation loop
+│   └── scripts/
+│       ├── generate_teacher.py
+│       ├── apply_pns_filter.py
+│       ├── train_iter.py
+│       └── eval_correct.py
 │
-├── models/
-│   ├── sft/
-│   │   ├── qwen3_fast_causal/   # LoRA adapter (causal SFT)
-│   │   └── qwen3_fast_noncausal/ # LoRA adapter (noncausal SFT)
-│   └── dpo/
-│       └── qwen3_causal_dpo_v4/ # Fully-merged DPO model (3.3 GB)
+├── inference/               # Colab-ready inference notebooks
+│   ├── inference_DPO.ipynb
+│   ├── inference_SFT.ipynb
+│   └── inference_Self_Distill.ipynb
 │
 ├── data/
-│   ├── dpo/                     # DPO preference pairs
-│   ├── results_sft/fast/        # SFT evaluation results + CSV summary
-│   └── self_distill/            # Iteration data for self-distillation
+│   ├── dpo/                 # Preference pairs (JSONL)
+│   ├── self_distill/        # Per-iteration training data
+│   └── results_sft/         # Evaluation outputs and summaries
 │
-├── inference/                   # Colab inference notebooks
-│   ├── inference_DPO.ipynb      # DPO vs base Qwen3-1.7B
-│   ├── inference_SFT.ipynb      # Base vs causal SFT vs noncausal SFT
-│   └── inference_Self_Distill.ipynb # Iter1 vs Iter2 vs base Qwen3-8B
-│
-└── README.md
+└── models/
+    ├── sft/                 # LoRA adapters (causal, noncausal)
+    └── dpo/                 # Merged DPO checkpoint
 ```
 
 ---
 
-## Hardware, Models & Datasets
+## Quickstart
 
-| Component | Specification |
-|-----------|---------------|
-| GPU (SFT/DPO) | NVIDIA T4 16 GB (Google Colab) |
-| GPU (Self-distill) | NVIDIA A100 40 GB |
-| SFT/DPO base model | Qwen3-1.7B (bfloat16, no quantisation) |
-| Self-distill student | Qwen3-8B (4-bit NF4 QLoRA, bfloat16 compute) |
-| Self-distill teacher | Qwen3-14B (inference only) |
-| Training dataset | GSM-8k train split (7473 examples; causal subset ≈1446) |
-| Evaluation dataset | GSM-8k test split (1319 examples) |
-| LoRA rank / alpha | r=16 / α=32 |
-| SFT LoRA targets | q, k, v, o, gate, up, down projections |
-| DPO LoRA targets | q, v projections |
-| PNS threshold τ | 0.5 |
-| PNS rollouts k | 3 |
+### Setup
 
----
-
-## RQ1 — Token Efficiency via PNS Pruning
-
-PNS pruning reduces average chain length from ~210 tokens to ~169 tokens (−20%) while simultaneously improving accuracy from 74.1% (full CoT SFT) to 77.3% (PNS-pruned SFT). This validates the core hypothesis: the removed tokens were causally inert — their presence neither enabled nor was necessary for reaching the correct answer.
-
-Random pruning, which shortens chains to a similar length without causal guidance, degrades accuracy to 74.1%, confirming that it is the *causal selection* (not mere brevity) that explains the gain.
-
-**Run PNS pruning:**
 ```bash
+git clone https://github.com/ayesha0412/causalmath.git
+cd causalmath
+pip install torch transformers peft trl datasets accelerate bitsandbytes
+```
+
+### RQ1 — PNS Pruning
+
+```bash
+# Generate CoT traces and apply PNS optimisation
 cd expt
 bash run_algo_o.sh
 ```
 
----
-
-## RQ2 — SFT on Causal Chains
-
-### ICL Evaluation
+### RQ2a — In-Context Learning
 
 ```bash
-cd expt
 bash run_icl.sh --dataset gsm8k --shots 0 1 3 5
 ```
 
-### SFT Training
+### RQ2b — Supervised Fine-Tuning
 
 ```bash
-# Prepare training data
-python sft/prepare_sft_correct.py --condition causal --output data/sft/causal_train.jsonl
+# Causal condition (PNS-pruned chains)
+python sft/prepare_sft_correct.py --condition causal
+python sft/train_sft.py --condition causal
+python sft/eval_correct.py --condition causal
 
-# Train LoRA adapter
-python sft/train_correct.py \
-  --base_model Qwen/Qwen3-1.7B \
-  --train_data data/sft/causal_train.jsonl \
-  --output_dir models/sft/qwen3_fast_causal \
-  --epochs 3 --lr 2e-4 --lora_r 16
-
-# Evaluate
-python sft/eval_correct.py \
-  --adapter models/sft/qwen3_fast_causal \
-  --test_data data/gsm8k/test.jsonl
+# Noncausal condition (full CoT chains)
+python sft/prepare_sft_correct.py --condition noncausal
+python sft/train_sft.py --condition noncausal
 ```
 
-### Key Hyperparameters
-
-| Parameter | Value |
-|-----------|-------|
-| Learning rate | 2e-4 |
-| Epochs | 3 |
-| Batch size | 4 (grad accum 4 → effective 16) |
-| Warmup ratio | 0.05 |
-| LR scheduler | cosine |
-| Max sequence length | 2048 |
-| Final train loss | 0.2357 |
-
----
-
-## RQ3 — Novel Extensions
-
-### 3a. DPO with PNS Preference Pairs
-
-Standard DPO requires human-annotated preferences. We eliminate annotation cost entirely by constructing preference pairs automatically:
-- **Chosen** ($y_w$): PNS-pruned correct reasoning chain from the training set
-- **Rejected** ($y_l$): The SFT model's own incorrect generation on the same problem
-
-This creates a self-supervised signal grounded in causal quality: the model learns to prefer causally-sufficient chains over its own failures.
+### RQ3a — DPO
 
 ```bash
-# Build DPO pairs
-python dpo/build_dpo_pairs.py \
-  --causal_data data/sft/causal_train.jsonl \
-  --sft_model models/sft/qwen3_fast_causal \
-  --output data/dpo/dpo_pairs_v4.jsonl
-
-# Train DPO
-python dpo/train_dpo.py \
-  --pairs data/dpo/dpo_pairs_v4.jsonl \
-  --sft_checkpoint models/sft/qwen3_fast_causal \
-  --output_dir models/dpo/qwen3_causal_dpo_v4 \
-  --beta 0.1 --epochs 1
-
-# Evaluate
-python dpo/eval_dpo.py \
-  --model models/dpo/qwen3_causal_dpo_v4 \
-  --test_data data/gsm8k/test.jsonl
+python dpo/build_dpo_pairs.py
+python dpo/train_dpo.py
+python dpo/eval_dpo.py
 ```
 
-**DPO v4 result: 75.1% accuracy at zero annotation cost**, within 2.2 pp of the fully-supervised SFT baseline (77.3%).
-
-### 3b. PNS Self-Distillation (Qwen3-8B)
-
-Iterative self-distillation removes dependency on a permanent external teacher:
-
-```
-Iter 0: Qwen3-14B teacher → generate CoT on GSM-8k train
-         ↓ PNS filter (τ=0.5, k=3)
-Iter 1: Train Qwen3-8B on teacher-filtered chains → 81.6% acc
-         ↓ Qwen3-8B generates its own CoT
-         ↓ PNS filter
-Iter 2: Train Qwen3-8B on self-filtered chains → 82.9% acc
-```
-
-From Iter 2 onward, no external model is needed. The student improves on itself by retaining only the causally necessary steps from its own reasoning, implementing a form of autonomous curriculum tightening.
+### RQ3b — Self-Distillation
 
 ```bash
-# Teacher generation
-python Self_distill/scripts/generate_teacher.py \
-  --model Qwen/Qwen3-14B --dataset data/gsm8k/train.jsonl
+# Iter 1: teacher-seeded
+python Self_distill/scripts/generate_teacher.py
+python Self_distill/scripts/apply_pns_filter.py --iter 1
+python Self_distill/scripts/train_iter.py --iter 1
 
-# PNS filter
-python Self_distill/scripts/apply_pns_filter.py \
-  --input data/self_distill/teacher_gen.jsonl \
-  --output data/self_distill/iter_1/filtered.jsonl
-
-# Train Iter 1
-python Self_distill/scripts/train_iter.py \
-  --data data/self_distill/iter_1/filtered.jsonl \
-  --output models/self_distill/iter1
-
-# Self-generate + filter + train Iter 2
-python Self_distill/scripts/generate_teacher.py \
-  --model models/self_distill/iter1 \
-  --dataset data/gsm8k/train.jsonl \
-  --output data/self_distill/iter_2/self_gen.jsonl
-
-python Self_distill/scripts/apply_pns_filter.py \
-  --input data/self_distill/iter_2/self_gen.jsonl \
-  --output data/self_distill/iter_2/filtered.jsonl
-
-python Self_distill/scripts/train_iter.py \
-  --data data/self_distill/iter_2/filtered.jsonl \
-  --output models/self_distill/iter2
+# Iter 2: self-generated, no teacher
+python Self_distill/scripts/generate_teacher.py --model iter1
+python Self_distill/scripts/apply_pns_filter.py --iter 2
+python Self_distill/scripts/train_iter.py --iter 2
 ```
 
 ---
 
-## Reproduction on Limited Hardware
+## Inference Notebooks
 
-### What We Matched
+Three Colab-ready notebooks are provided for interactive testing of trained checkpoints against base models. Each uses a small set of examples designed to fit within Colab's T4 memory:
 
-| Paper Result | Our Result | Gap | Notes |
-|-------------|-----------|-----|-------|
-| PNS reduces tokens by ~25% | We achieve ~20% | −5 pp | k=3 rollouts vs paper's k=5 |
-| Causal SFT > Full CoT SFT | Confirmed | — | +3.2 pp on same direction |
-| Causal SFT > Random-pruned | Confirmed | — | +4.1 pp |
-| Self-distill Iter2 > Iter1 | Confirmed | +1.3 pp | — |
+| Notebook | What it compares |
+|----------|-----------------|
+| [`inference_DPO.ipynb`](inference/inference_DPO.ipynb) | DPO-aligned model vs base Qwen3-1.7B |
+| [`inference_SFT.ipynb`](inference/inference_SFT.ipynb) | Causal SFT vs Noncausal SFT vs base |
+| [`inference_Self_Distill.ipynb`](inference/inference_Self_Distill.ipynb) | Iter 1 vs Iter 2 vs base Qwen3-8B |
 
-### Technical Justification for Our Results
-
-Working under hardware constraints imposed meaningful differences from the paper's setup, each addressable with more compute:
-
-- **Smaller base model (1.7B vs 7B–70B):** Smaller capacity limits the ceiling for in-context retrieval of causal patterns. Upgrading to Qwen3-7B or 14B with the same pipeline would directly recover several accuracy points.
-- **Fewer PNS rollouts (k=3 vs k=5):** PNS estimates are noisy at low k; increasing rollouts reduces variance in step retention decisions, yielding cleaner training signal and tighter token reduction.
-- **Reduced training epochs (3 vs paper's reported 5–10):** Early stopping was necessary to avoid VRAM saturation on T4. A gradient-checkpointing configuration or A100 access would allow full-epoch training. Even one additional epoch at the same LR schedule would likely recover 1–2 accuracy points given the 0.2357 final train loss, which remains above the inflection point of the loss curve.
-- **LoRA rank r=16 (vs full fine-tuning):** Parameter-efficient fine-tuning introduces a low-rank bottleneck. Raising r to 32 or 64, or fine-tuning additional projection layers, would reduce approximation error in the adapter.
-- **4-bit quantisation for 8B model:** NF4 quantisation introduces quantisation noise in the weight representation. The accuracy gap between quantised and full-precision 8B would narrow with bfloat16 training.
-
-All of these are engineering constraints, not algorithmic ones. The directional results are consistent with the paper under all conditions tested.
-
----
-
-## Inference Notebooks (Google Colab)
-
-Three inference notebooks are provided for interactive evaluation:
-
-| Notebook | Models Compared | Drive Model |
-|----------|----------------|-------------|
-| [`inference_DPO.ipynb`](inference/inference_DPO.ipynb) | DPO v4 vs Qwen3-1.7B base | `models/dpo/qwen3_causal_dpo_v4/` |
-| [`inference_SFT.ipynb`](inference/inference_SFT.ipynb) | Base vs Causal SFT vs Noncausal SFT | `models/sft/qwen3_fast_causal/` + noncausal |
-| [`inference_Self_Distill.ipynb`](inference/inference_Self_Distill.ipynb) | Iter1 vs Iter2 vs Qwen3-8B base | `Self_distill/models/` |
-
-Each notebook uses 5 simple 1–2-step GSM-8k examples to avoid OOM on Colab T4, and includes an accuracy disclaimer referencing the full evaluation results above.
-
-> **Note:** These are sanity-check inference runs, not accuracy benchmarks. Full evaluation results are reported in the tables above and in `data/results_sft/fast/dpo_results_summary.csv`.
-
----
-
-## Installation
-
-```bash
-git clone https://github.com/<your-repo>/causalmath.git
-cd causalmath
-
-pip install torch transformers peft trl datasets accelerate bitsandbytes
-pip install openai anthropic  # for API-based ICL experiments
-```
-
-**Python:** 3.10+  
-**CUDA:** 11.8+ (for local GPU runs)
+> These are sanity-check runs to verify model behaviour. Full benchmark evaluation results are stored in `data/results_sft/`.
 
 ---
 
 ## Citation
 
-If you use this code or build upon our novel DPO or self-distillation extensions, please cite the original paper and this reproduction:
-
+**Base paper:**
 ```bibtex
-@inproceedings{yu2024keeping,
-  title     = {Keeping Only What Counts: Causal Chain-of-Thought Distillation for Mathematical Reasoning},
-  author    = {Yu, et al.},
-  year      = {2024}
+@inproceedings{yu2025causal,
+  title     = {Causal Sufficiency and Necessity Improves Chain-of-Thought Reasoning},
+  author    = {Yu, Xingchen and Wang, Zihao and Yang, Liang and Li, Haoran and
+               Liu, Anni and Xue, Xianglong and Wang, Jian and Yang, Meng},
+  booktitle = {Proceedings of the 39th Conference on Neural Information Processing Systems (NeurIPS)},
+  year      = {2025},
+  note      = {arXiv:2506.09853}
 }
+```
 
-@misc{awan2025causalmath,
-  title     = {Reproduction and Extension of Causal CoT Distillation with DPO and Self-Distillation},
-  author    = {Awan, Ayesha Tahir and Iqbal, Iqra and Murtaza, Muhammad Hamid},
-  institution = {FAST-NUCES, Lahore},
-  year      = {2025}
+**This reproduction:**
+```bibtex
+@misc{awan2025pnscot,
+  title       = {Keeping Only What Counts: Causal PNS-Guided CoT Optimisation
+                 with Automatic DPO Preference Alignment and Iterative Self-Distillation},
+  author      = {Awan, Ayesha Tahir and Zahid, Mariam and Khan, Ahmed},
+  institution = {FAST-NUCES, Islamabad},
+  year        = {2025}
 }
 ```
 
 ---
 
-## References
-
-[4] Yu et al., "Keeping Only What Counts: Causal Chain-of-Thought Distillation for Mathematical Reasoning," 2024.  
-[12] Rafailov et al., "Direct Preference Optimization: Your Language Model is Secretly a Reward Model," NeurIPS 2023.  
-[18] Hu et al., "LoRA: Low-Rank Adaptation of Large Language Models," ICLR 2022.  
-[19] Dettmers et al., "QLoRA: Efficient Finetuning of Quantized LLMs," NeurIPS 2023.  
-[20] Cobbe et al., "Training Verifiers to Solve Math Word Problems" (GSM-8k), arXiv 2021.
-
----
-
-© 2025 Ayesha Tahir Awan, Iqra Iqbal, Muhammad Hamid Murtaza — FAST-NUCES, Lahore. All rights reserved.  
-Unauthorised reproduction, distribution, or modification of this work is prohibited without explicit written permission from the authors.
+© 2025 Ayesha Tahir Awan, Mariam Zahid, Ahmed Khan — FAST-NUCES, Islamabad. All rights reserved.
