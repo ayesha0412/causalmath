@@ -1,0 +1,19 @@
+{
+  "run_name": "sft_run",
+  "condition": "noncausal",
+  "model": "Qwen/Qwen3-8B",
+  "data": "data/self_distill/noncausal_messages.jsonl",
+  "n_train": 930,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "epochs": 2,
+  "batch_size": 1,
+  "grad_accum": 8,
+  "lr": 0.0002,
+  "max_seq_len": 512,
+  "train_loss": 0.14041216786091143,
+  "total_steps": 234,
+  "duration_s": 7045,
+  "label_masking": true,
+  "timestamp": "2026-05-12 12:19:05"
+}

@@ -1,0 +1,5 @@
+condition,accuracy_pct,correct,total,avg_tokens,avg_steps,token_reduction_vs_base_pct
+original,66.0,33,50,2048.0,29.1,0.0
+noncausal,92.0,46,50,260.8,5.6,87.3
+causal_iter1,90.0,45,50,143.0,2.0,93.0
+self_distill_iter2,90.0,45,50,136.7,2.1,93.3
