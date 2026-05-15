@@ -1,6 +1,0 @@
-method,model,dataset,tokens,steps,accuracy,n
-standard_cot,qwen3-8b,gsm8k,808.23,3.74,82.94,1319
-fast_solve,qwen3-8b,gsm8k,457.71,1.05,93.18,1319
-reduction,qwen3-8b,gsm8k,527.96,1.09,91.66,1319
-cod,qwen3-8b,gsm8k,415.11,1.00,92.72,1319
-ours_icl,qwen3-8b,gsm8k,604.13,1.95,90.83,1319
