@@ -72,6 +72,8 @@ def get_args():
     p.add_argument("--seed",         type=int,   default=42)
     p.add_argument("--logging_steps",type=int,   default=10)
     p.add_argument("--save_steps",   type=int,   default=200)
+    p.add_argument("--load_in_4bit", action="store_true",
+                   help="QLoRA 4-bit (required for 7B+ on 16GB GPU)")
     return p.parse_args()
 
 
@@ -206,8 +208,8 @@ def main():
     try:
         import torch
         from transformers import (AutoTokenizer, AutoModelForCausalLM,
-                                   TrainingArguments, Trainer)
-        from peft import LoraConfig, get_peft_model, TaskType
+                                   TrainingArguments, Trainer, BitsAndBytesConfig)
+        from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
         from datasets import Dataset
     except ImportError as e:
         print(f"Missing: {e}")
@@ -290,18 +292,26 @@ def main():
 
         # ── Model ─────────────────────────────────────────────────────────────
         dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        log(lf, f"Loading model ({dtype}): {args.model}")
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model,
-            torch_dtype          = dtype,
-            device_map           = "auto",
-            trust_remote_code    = True,
-            attn_implementation  = "eager",   # no flash attention, no SDPA kernels
-        )
+        load_kwargs = dict(device_map="auto", trust_remote_code=True, attn_implementation="eager")
+        if args.load_in_4bit:
+            log(lf, f"Loading model (4-bit QLoRA): {args.model}")
+            load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+            )
+        else:
+            log(lf, f"Loading model ({dtype}): {args.model}")
+            load_kwargs["torch_dtype"] = dtype
+        model = AutoModelForCausalLM.from_pretrained(args.model, **load_kwargs)
         model.config.use_cache = False
-        model.gradient_checkpointing_enable(
-            gradient_checkpointing_kwargs={"use_reentrant": False}
-        )
+        if args.load_in_4bit:
+            model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+        else:
+            model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs={"use_reentrant": False}
+            )
         vram_used = torch.cuda.memory_allocated() / 1024**3
         log(lf, f"  VRAM after model load: {vram_used:.2f} GB")
 

@@ -68,6 +68,10 @@ def get_args():
                    choices=["math500", "gsm8k", "commonsenseqa", "aime"])
     p.add_argument("--max_new_tokens", type=int, default=None)
     p.add_argument("--batch_size",     type=int, default=4)
+    p.add_argument("--load_in_4bit",   action="store_true",
+                   help="Load model in 4-bit (required for 14B on 16GB VRAM)")
+    p.add_argument("--no_thinking",    action="store_true",
+                   help="Disable thinking mode at eval (use when trained with enable_thinking=False)")
     return p.parse_args()
 
 
@@ -113,16 +117,16 @@ def count_steps(text):
     return len([p for p in re.split(r"\n\n+", text) if p.strip()])
 
 
-def build_prompt(tokenizer, question):
+def build_prompt(tokenizer, question, thinking=True):
     """
-    Build the inference prompt matching train_correct.py exactly.
-    Qwen3 needs enable_thinking=True to emit <think>\\n as generation prefix.
-    Falls back gracefully for other model families.
+    Build the inference prompt.
+    Use thinking=True (default) for models trained with enable_thinking=True.
+    Use thinking=False (--no_thinking flag) for models trained with enable_thinking=False.
     """
     msgs   = [{"role": "user", "content": question.strip()}]
     kwargs = dict(tokenize=False, add_generation_prompt=True)
     try:
-        prompt = tokenizer.apply_chat_template(msgs, enable_thinking=True, **kwargs)
+        prompt = tokenizer.apply_chat_template(msgs, enable_thinking=thinking, **kwargs)
     except TypeError:
         prompt = tokenizer.apply_chat_template(msgs, **kwargs)
     return prompt
@@ -131,13 +135,14 @@ def build_prompt(tokenizer, question):
 def main():
     args = get_args()
     max_new_tokens = args.max_new_tokens or DATASET_MAX_TOKENS[args.dataset]
+    thinking = not args.no_thinking
 
     try:
         import torch
-        from transformers import AutoTokenizer, AutoModelForCausalLM
+        from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
         from peft import PeftModel
     except ImportError as e:
-        print(f"Missing: {e}\npip install transformers peft accelerate")
+        print(f"Missing: {e}\npip install transformers peft accelerate bitsandbytes")
         sys.exit(1)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
@@ -149,24 +154,35 @@ def main():
         with open(cfg_path) as f:
             adapter_cfg = json.load(f)
         base_name = adapter_cfg["base_model_name_or_path"]
-        print(f"Loading adapter: {args.adapter}  (base: {base_name})")
+        print(f"Loading adapter: {args.adapter}  (base: {base_name})"
+              + ("  [4-bit]" if args.load_in_4bit else ""))
         tokenizer = AutoTokenizer.from_pretrained(base_name, trust_remote_code=True)
     else:
         base_name = args.base_model
-        print(f"Loading base model: {base_name}")
+        print(f"Loading base model: {base_name}"
+              + ("  [4-bit]" if args.load_in_4bit else ""))
         tokenizer = AutoTokenizer.from_pretrained(base_name, trust_remote_code=True)
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"  # left-pad for batch generation
 
-    base_model = AutoModelForCausalLM.from_pretrained(
-        base_name,
-        torch_dtype          = dtype,
-        device_map           = "auto",
-        trust_remote_code    = True,
-        attn_implementation  = "eager",
+    load_kwargs = dict(
+        device_map        = "auto",
+        trust_remote_code = True,
+        attn_implementation = "eager",
     )
+    if args.load_in_4bit:
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit             = True,
+            bnb_4bit_compute_dtype   = torch.bfloat16,
+            bnb_4bit_use_double_quant= True,
+            bnb_4bit_quant_type      = "nf4",
+        )
+    else:
+        load_kwargs["torch_dtype"] = dtype
+
+    base_model = AutoModelForCausalLM.from_pretrained(base_name, **load_kwargs)
 
     if args.adapter:
         model = PeftModel.from_pretrained(base_model, args.adapter)
@@ -202,7 +218,7 @@ def main():
             questions = [r.get("question") or r.get("problem", "") for r in batch]
             gts       = [str(r.get("answer", r.get("answerKey", ""))) for r in batch]
 
-            prompts = [build_prompt(tokenizer, q) for q in questions]
+            prompts = [build_prompt(tokenizer, q, thinking=thinking) for q in questions]
 
             # Show first 3 prompts to verify format
             if done_n == 0 and i == 0:
