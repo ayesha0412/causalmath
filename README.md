@@ -1,6 +1,4 @@
-# Keeping Only What Counts
-
-### Causal PNS-Guided Chain-of-Thought Optimisation with Automatic DPO Preference Alignment and Iterative Self-Distillation
+## Causal PNS-Guided Chain-of-Thought Optimisation with Automatic DPO Preference Alignment and Iterative Self-Distillation
 
 **Ayesha Tahir Awan · Ahmed Khan · Mariam Zahid**
 Supervised by **Dr. Zohair Ahmed**
