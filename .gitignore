@@ -1,77 +1,83 @@
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
-*.tmp
-.DS_Store
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+*.whl
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env.local
+*.env
+
+# ── Secrets — NEVER commit these ──────────────────────────────────────────────
 .env
 
-# Model checkpoints and adapters (too large for GitHub)
-models/
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+Thumbs.db
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Model weights and checkpoints (too large for GitHub) ──────────────────────
+outputs/checkpoints/
 *.pth
 *.pt
 *.bin
 *.safetensors
-checkpoint-*/
-adapter_*/
-merged_model/
 unsloth_compiled_cache/
-
-# Training logs and cache
-*.log
+*.cache/
 .cache/
-cache/
+
+# ── HuggingFace cache ─────────────────────────────────────────────────────────
 huggingface/
 .huggingface/
+cache/
 
-# Large data files - exclude raw source data
+# ── Raw large data files (download via scripts/download_datasets.py) ──────────
+data/raw/
 *.jsonl
-data/dpo/
-data/gsm8k/
-data/MATH-500/
-data/commonsenseqa/
 
-# Allow SFT training data
-!data/sft/fast/causal_train.jsonl
-!data/sft/fast/noncausal_train.jsonl
+# ── Allow curated processed data (small, needed for reproducibility) ──────────
+!data/processed/sft/causal_train.jsonl
+!data/processed/sft/noncausal_train.jsonl
+!data/processed/dpo/dpo_pairs_v3.jsonl
+!data/processed/dpo/dpo_pairs_combined.jsonl
+!data/processed/dpo/dpo_pairs_causal_v2.jsonl
+!data/processed/dpo/dpo_pairs_gsm8k.jsonl
+!data/processed/dpo/rejected_chains_gsm8k.jsonl
+!data/processed/dpo/detailed_pns.jsonl
+!data/processed/dpo/gsm8k_causal_train.jsonl
+!data/processed/self_distill/causal_300.jsonl
+!data/processed/self_distill/noncausal_messages.jsonl
+!data/processed/self_distill/iter_1/*.jsonl
+!data/processed/self_distill/iter_2/*.jsonl
 
-# Allow results (small, needed for paper)
-!data/results_sft/fast/*.jsonl
-!data/results_sft/distill/*.jsonl
+# ── Allow evaluation results (small CSVs + result JSONLs for paper) ───────────
+!outputs/results/
+!outputs/results/**/*.jsonl
+!outputs/results/**/*.csv
+!outputs/results/**/*.json
 
-# Allow DPO training pairs (curated, needed for reproducibility)
-!data/dpo/dpo_pairs_v3.jsonl
-!data/dpo/dpo_pairs_gsm8k.jsonl
-!data/dpo/dpo_pairs_combined.jsonl
-!data/dpo/dpo_pairs_causal_v2.jsonl
-!data/dpo/gsm8k_causal_train.jsonl
-!data/dpo/rejected_chains_gsm8k.jsonl
-!data/dpo/detailed_pns.jsonl
-!data/dpo/sample10.jsonl
+# ── Allow training logs (useful for reproducibility) ─────────────────────────
+!outputs/logs/
+!outputs/logs/*.txt
+!outputs/logs/**/*.log
+!outputs/logs/**/*.json
 
-# Allow self-distillation training data
-!data/self_distill/causal_300.jsonl
-!data/self_distill/seed_hard100.jsonl
-!data/self_distill/seed_hard250.jsonl
-!data/self_distill/noncausal_messages.jsonl
-!data/self_distill/iter1/*.jsonl
-!data/self_distill/iter2/*.jsonl
-
-# Allow all files in Self_distill/ directory
-!Self_distill/
-!Self_distill/**
-
-# Allow all files in DPO_2/ directory
-!DPO_2/
-!DPO_2/**
-
-# Allow all files in DPO/ directory
-!DPO/
-!DPO/**
-!Self_distill/**/*.jsonl
-!Self_distill/**/*.log
-!Self_distill/**/*.csv
-!Self_distill/**/*.md
-!Self_distill/**/*.py
-!Self_distill/**/*.json
-
-# Logs - allow SFT/DPO logs for supervisor
-# logs/
+# ── Training logs generated during runs ───────────────────────────────────────
+*.log

@@ -1,0 +1,8 @@
+# Development dependencies — install with: pip install -r requirements-dev.txt
+pytest>=8.0
+pytest-cov>=5.0
+ruff>=0.4.0
+black>=24.0
+mypy>=1.10
+ipykernel>=6.0         # for running notebooks in VS Code
+jupyterlab>=4.0

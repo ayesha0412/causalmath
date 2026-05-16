@@ -1,0 +1,42 @@
+# PNS Curation Pipeline Configuration
+# Used by: scripts/run_curation.py
+
+# Ollama inference settings
+model:
+  name: "${QWEN_MODEL:qwen3:14b}"          # Override with QWEN_MODEL env var
+  ollama_base_url: "http://localhost:11434/v1"
+  temperature: 0.7
+  top_p: 0.95
+  top_k: 20
+  max_tokens: 4096
+  max_retries: 5
+  thinking: false                           # Disabled for realistic PN signal
+
+# PNS algorithm thresholds
+pns:
+  threshold: 0.5                            # PN < threshold → step is pruned
+  rollouts: 5                               # Monte-Carlo rollouts per step
+  alter_attempts: 3                         # Max re-generations for step replacement
+  do_type: 0                                # 0=context-continuation, 1=prompt-intervention
+
+# Per-use-case threshold presets (override pns.threshold at runtime)
+thresholds:
+  strict:   0.5                             # RQ1 SFT — only clearly necessary steps
+  moderate: 0.3                             # DPO pair building
+  relaxed:  0.1                             # Self-distillation (chains already short)
+
+# Batch / parallelism
+processing:
+  batch_size: 20                            # Questions per output flush
+  workers: 2                                # Parallel questions (match OLLAMA_NUM_PARALLEL)
+  append: true                              # Resume-safe: append to existing output
+
+# Dataset paths (relative to project root)
+datasets:
+  gsm8k_test:    "data/raw/gsm8k/test.jsonl"
+  math500_test:  "data/raw/math500/test.jsonl"
+  csqa_test:     "data/raw/commonsenseqa/test.jsonl"
+
+# Prompt selection (auto-detected from input filename if not set)
+# math → math_prompt, commonsenseqa/csqa → common_prompt
+prompt_mode: auto
