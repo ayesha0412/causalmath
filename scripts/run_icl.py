@@ -40,11 +40,11 @@ from causalmath.algorithm.equivalence import is_equivalent_answer
 
 _write_lock = threading.Lock()
 
-# No external PNS file needed — ours_icl uses hardcoded PNS-style examples
-# in icl_prompts.py, which have the correct answer format per dataset.
+# Default PNS-optimized trace files used as Ours-ICL exemplars.
+# These are the actual PNS-pruned results from RQ1.
 DEFAULT_PNS = {
-    "math500": None,
-    "gsm8k":   None,
+    "math500": r"data/MATH-500/math500_pns_qwen3-v2-pb-fixed.jsonl",
+    "gsm8k":   r"data/gsm8k/gsm8k_pns_qwen3-14b-thinking-v2.jsonl",
 }
 MAX_TOKENS_DEFAULT = {"math500": 8192, "gsm8k": 1536}
 

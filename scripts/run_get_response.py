@@ -198,19 +198,27 @@ def get_answer_for_line(record: dict) -> dict:
     ]
     # ────────────────────────────────────────────────────────────────────
 
-    # Retry up to 3 times if the response looks invalid (hallucination or truncation).
-    # Math datasets require \boxed{}; CSQA requires an Answer: A/B/C/D/E line.
+    # Retry up to 3 times on format check only.
+    # PS=0 detection is handled properly by run_algo_o.py (equivalent_ans.py),
+    # which handles all LaTeX formatting variants correctly.
+    # Simple regex PS check here causes false negatives on MATH-500 complex answers.
     import re as _re
+
     answer = ""
-    for attempt in range(3):
+    MAX_ATTEMPTS = 3
+    for attempt in range(MAX_ATTEMPTS):
         answer = query_api(messages)
+
+        # Format check only — does the answer contain a valid answer marker?
         if is_csqa:
-            valid = bool(_re.search(r"Answer\s*:\s*[A-E]", answer, _re.IGNORECASE))
+            fmt_ok = bool(_re.search(r"Answer\s*:\s*[A-E]", answer, _re.IGNORECASE))
         else:
-            valid = "\\boxed{" in answer
-        if valid:
+            # GSM-8K uses #### number; MATH-500 uses \boxed{}
+            fmt_ok = "\\boxed{" in answer or "####" in answer
+
+        if fmt_ok:
             break
-        print(f"  ⚠ Invalid response (attempt {attempt + 1}/3), retrying...")
+        print(f"  [attempt {attempt+1}/{MAX_ATTEMPTS}] Bad format — retrying...")
 
     # Store the answer into the record under 'model_answer'
     record["model_answer"] = answer
@@ -282,15 +290,27 @@ def main():
     input_file  = args.input_file
     output_file = args.output_file
 
-    # Clear output file if it already exists
+    # Resume: skip questions already answered in output file
+    done_questions = set()
     if os.path.exists(output_file):
-        os.remove(output_file)
+        with open(output_file, encoding="utf-8") as f_done:
+            for line in f_done:
+                if line.strip():
+                    try:
+                        d = json.loads(line)
+                        if d.get("model_answer"):
+                            done_questions.add(d["question"])
+                    except Exception:
+                        pass
+        print(f"Resuming — {len(done_questions)} questions already answered, skipping.")
 
     file_ext = os.path.splitext(input_file)[1].lower()
 
     if file_ext == ".jsonl":
         with open(input_file, "r", encoding="utf-8") as f_in:
-            records = [json.loads(line.strip()) for line in f_in if line.strip()]
+            all_records = [json.loads(line.strip()) for line in f_in if line.strip()]
+        records = [r for r in all_records if r.get("question", r.get("problem", "")) not in done_questions]
+        print(f"Total: {len(all_records)} | To generate: {len(records)}")
     elif file_ext == ".parquet":
         df = pd.read_parquet(input_file)
         records = df.to_dict(orient="records")

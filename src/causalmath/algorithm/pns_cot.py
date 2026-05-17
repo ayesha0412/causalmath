@@ -9,9 +9,6 @@ from causalmath.models.ollama_client import cerebras_query
 from concurrent.futures import ThreadPoolExecutor
 
 def query_api(messages, model=None, temperature=0.7):
-    # Rollouts use thinking=False — without internal deliberation the model is
-    # weaker and more likely to fail when a necessary step is removed, giving
-    # realistic PN signal instead of PN=0 for everything.
     return cerebras_query(messages, model=model, temperature=temperature, thinking=False)
 
 llm_api = query_api
@@ -37,14 +34,14 @@ def counted_rollout_call(do_type: int, message: List[Dict[str, str]],
             _m["rollout_prompt_intervention_count"] += 1
         else:
             _m["rollout_direct_count"] += 1
+        call_num = _m["total_rollout_calls"]
 
-    if do_type == 1:
-        print("Rollout type: prompt-intervention")
-    else:
-        print("Rollout type: direct")
+    rollout_type = "prompt-intervention" if do_type == 1 else "direct"
+    print(f"  → Rollout #{call_num} ({rollout_type})...")
 
     output = llm_api(message)
-    print("New rollout node:", output)
+    output_preview = output[:80].replace('\n', ' ') if output else "[empty]"
+    print(f"  ← Rollout #{call_num} done: {output_preview}...")
     return output
 
 
@@ -181,8 +178,11 @@ def ensure_different_step(
         replacement_steps = parse_nodes(replacement_text)
 
         # If no steps or the first new step is not equivalent to the original step, return
+        if not replacement_steps:
+            print("New rollout node differs from original")
+            return replacement_steps
         flag = counted_equiv_check(replacement_steps[0], original_step, _m, _m_lock)
-        if not replacement_steps or not flag:
+        if not flag:
             print("New rollout node differs from original")
             return replacement_steps
         else:
@@ -229,7 +229,7 @@ def evaluate_replacement_step(
         }
     ]
 
-    def single_rollout(_):
+    def single_rollout(attempt):
         evaluation_text = counted_rollout_call(0, eval_message, _m, _m_lock)
         if not evaluation_text:
             return 0
@@ -238,11 +238,9 @@ def evaluate_replacement_step(
         is_correct = counted_equiv_check(
             eval_final_answer, ground_truth, _m, _m_lock, check_answer=True
         )
-        print("Is new rollout final answer correct:", is_correct)
+        print(f"  Rollout {attempt+1}/{reasoning_attempts}: correct={is_correct}")
         return 1 if is_correct else 0
 
-    # max_workers=2 matches OLLAMA_NUM_PARALLEL=2: sending more threads than Ollama's
-    # parallel capacity just queues requests and adds overhead without GPU benefit.
     with ThreadPoolExecutor(max_workers=2) as executor:
         y_values = list(executor.map(single_rollout, range(reasoning_attempts)))
 
@@ -268,9 +266,10 @@ def update_chain_if_needed(
     current_step = nodes[i]
     context_steps = nodes[:i]
 
-    print("\n==== Intervening on step", i, "====")
-    print("Context so far:", context_steps)
-    print("Current step:", current_step)
+    print(f"\n{'='*60}")
+    print(f"Step {i}/{len(nodes)-1}: Intervening...")
+    print(f"  Current: {current_step[:60]}..." if len(current_step) > 60 else f"  Current: {current_step}")
+    print(f"{'='*60}")
 
     replacement_text = generate_replacement_step(query, context_steps, current_step, do_type, _m, _m_lock)
 

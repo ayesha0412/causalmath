@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define the dataset names (add more as needed)
-datasets=("AIME")
-
+datasets=("gsm8k")
 # Base data directory
-base_dir="../data"
+input_file="$base_dir/$dataset/test_gsm8k_answered.jsonl"
+np_output="$base_dir/$dataset/gsm8k_pns_np.jsonl"
 
 # Set PYTHONPATH
 export PYTHONPATH="$(pwd)/../algo"

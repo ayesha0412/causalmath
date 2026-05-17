@@ -132,21 +132,22 @@ def main():
             f_in.readline()
 
         line_num = lines_processed
-        eof = False
         total_written = 0
 
-        pbar = tqdm(desc="🚀 Processing", unit="lines", ncols=80)
+        pbar = tqdm(desc="Processing", unit="lines", ncols=80)
         write_lock = threading.Lock()
 
         def process_and_write(line, lnum):
+            nonlocal total_written
             try:
                 result = get_metrics_for_line(line, prompt_based, threshold, rollouts)
                 with write_lock:
                     f_out.write(json.dumps(result, ensure_ascii=False) + "\n")
                     f_out.flush()
+                    total_written += 1
                     log.write(f"[OK] Line {lnum} written.\n")
                     log.flush()
-                print(f"{Fore.GREEN}✅ Line {lnum} done{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}[L{lnum}] done{Style.RESET_ALL}")
                 return lnum, None
             except Exception as e:
                 with write_lock:
@@ -154,27 +155,22 @@ def main():
                     f_err.flush()
                     log.write(f"[ERR] Line {lnum} failed: {e}\n")
                     log.flush()
-                print(f"{Fore.RED}❌ Line {lnum} failed: {e}{Style.RESET_ALL}")
+                print(f"{Fore.RED}[L{lnum}] failed: {e}{Style.RESET_ALL}")
                 return lnum, e
 
-        while not eof:
-            batch = []
-            batch_lnums = []
-            for _ in range(batch_size):
-                line = f_in.readline()
-                if not line:
-                    eof = True
-                    break
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futures = {}
+            for line in f_in:
                 line_num += 1
-                batch.append(line)
-                batch_lnums.append(line_num)
+                fut = ex.submit(process_and_write, line, line_num)
+                futures[fut] = line_num
 
-            with ThreadPoolExecutor(max_workers=workers) as ex:
-                futures = {ex.submit(process_and_write, ln, lnum): lnum
-                           for ln, lnum in zip(batch, batch_lnums)}
-                for fut in as_completed(futures):
+            for fut in as_completed(futures):
+                try:
                     fut.result()
-                    pbar.update(1)
+                except Exception:
+                    pass
+                pbar.update(1)
 
         pbar.close()
 

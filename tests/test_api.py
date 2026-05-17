@@ -14,8 +14,8 @@ def query_api(messages: List[Dict[str, str]], model=None, temperature=0.7) -> st
 #     Answer 2: {ground_truth}
 #     Respond with "yes" if the answers convey the same meaning, even if they are written differently. Respond with "no" otherwise.
 #     """ 
-# print('进行答案对比：')
-# print("ground_truth:",ground_truth,"final_answer:",final_answer)
+# print('Comparing answers:')
+# print("ground_truth:", ground_truth, "final_answer:", final_answer)
 
 # answer = query_api([{"role": "user", "content": prompt}])
-# print('是否回答正确:',answer)
+# print('Is answer correct:', answer)
