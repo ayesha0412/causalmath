@@ -1,0 +1,105 @@
+# ============================================================
+# Causal PNS-Guided CoT Optimisation — Master Config
+# Ayesha Tahir Awan, Mariam Zahid, Ahmed Khan
+# FAST-NUCES Islamabad
+# ============================================================
+
+# ── PNS Algorithm (RQ1) ─────────────────────────────────────
+pns:
+  model: "Qwen/Qwen3-14B"
+  inference_backend: "ollama"
+  threshold_alpha: 0.5
+  rollouts_k: 3
+  strategy: "direct_rollout"        # direct_rollout | external_rollout
+  enable_thinking: false            # strip <think> block from visible CoT
+  context_limit: 4096
+
+# ── Datasets ─────────────────────────────────────────────────
+data:
+  gsm8k:
+    source: "openai/gsm8k"
+    split_train: "train"
+    split_test: "test"              # 1319 examples
+  math500:
+    source: "HuggingFaceH4/MATH-500"
+    split_test: "test"              # 500 examples
+  sft_train_examples: 1100
+  self_distill_iter1_examples: 300
+  self_distill_iter2_examples: 62   # self-generated + PNS filtered
+
+# ── SFT — RQ2b (Qwen3-1.7B) ─────────────────────────────────
+sft:
+  base_model: "Qwen/Qwen3-1.7B"
+  conditions: ["causal", "noncausal"]
+  epochs: 3
+  batch_size: 4
+  grad_accum_steps: 4               # effective batch = 16
+  learning_rate: 5.0e-4
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  max_seq_length: 1024
+  precision: "bfloat16"
+  quantisation: null                # no quantisation for 1.7B
+  lora:
+    r: 16
+    alpha: 32
+    dropout: 0.05
+    target_modules: ["q_proj", "v_proj"]
+  output_dir: "models/sft"
+
+# ── DPO — RQ3a (Novel) ───────────────────────────────────────
+dpo:
+  base_model: "Qwen/Qwen3-1.7B"
+  sft_checkpoint: "models/sft/qwen3_fast_causal"
+  preference_pairs: 390             # 186 PNS + 114 minimal completion
+  beta: 0.1
+  epochs: 2
+  batch_size: 1
+  grad_accum_steps: 8
+  learning_rate: 5.0e-6
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  max_seq_length: 2048
+  precision: "bfloat16"
+  lora:
+    r: 16
+    alpha: 32
+    target_modules: ["q_proj", "v_proj"]
+  output_dir: "models/dpo/qwen3_causal_dpo_v4"
+
+# ── Self-Distillation — RQ3b (Novel) ─────────────────────────
+self_distill:
+  student_model: "Qwen/Qwen3-8B"
+  teacher_model: "Qwen/Qwen3-14B"  # used only in iter1
+  quantisation: "4bit_nf4"
+  pns_threshold: 0.5
+  pns_rollouts: 3
+  iter1:
+    epochs: 2
+    learning_rate: 2.0e-4
+    max_seq_length: 2048
+    training_records: 300
+  iter2:
+    epochs: 6
+    learning_rate: 1.0e-4
+    max_seq_length: 2048
+    training_records: 62            # self-generated, no teacher
+  lora:
+    r: 16
+    alpha: 32
+  output_dir: "models/self_distill"
+
+# ── ICL — RQ2a ───────────────────────────────────────────────
+icl:
+  model: "Qwen/Qwen3-8B"
+  inference_backend: "ollama"
+  methods: ["standard_cot", "fast_solve", "reduction", "cod", "proposed_icl"]
+  datasets: ["gsm8k", "math500"]
+
+# ── Evaluation ───────────────────────────────────────────────
+eval:
+  gsm8k_test_size: 1319
+  math500_test_size: 500
+  self_distill_eval_subset: 50      # seed=42
+  answer_extraction: "boxed_then_hash"   # \boxed{} → #### fallback
+  results_dir: "results"

@@ -1,0 +1,30 @@
+experiment,model,condition,dataset,epoch,train_loss,eval_accuracy,avg_tokens,avg_steps,notes
+RQ1_PNS,Qwen3-14B,before_pns,gsm8k,-,-,0.921,53.7,3.41,Initial accuracy before pruning
+RQ1_PNS,Qwen3-14B,after_pns,gsm8k,-,-,0.921,42.2,2.84,21.4% token reduction with 0.0pp accuracy change
+RQ1_PNS,Qwen3-14B,before_pns,math500,-,-,0.858,180.6,12.38,Initial accuracy before pruning
+RQ1_PNS,Qwen3-14B,after_pns,math500,-,-,0.858,120.4,8.50,33.3% token reduction with 0.0pp accuracy change
+RQ2_ICL,Qwen3-8B,standard_cot,gsm8k,-,-,0.8294,808.23,3.74,No thinking mode (conventional baseline)
+RQ2_ICL,Qwen3-8B,fast_solve,gsm8k,-,-,0.9318,457.71,1.05,Highest GSM-8k accuracy
+RQ2_ICL,Qwen3-8B,reduction,gsm8k,-,-,0.9166,527.96,1.09,Thinking mode enabled
+RQ2_ICL,Qwen3-8B,cod,gsm8k,-,-,0.9272,415.11,1.00,Best token efficiency
+RQ2_ICL,Qwen3-8B,proposed_icl,gsm8k,-,-,0.9083,604.0,1.20,PNS-guided exemplars
+RQ2_ICL,Qwen3-8B,standard_cot,math500,-,-,0.872,3136.0,8.40,No thinking mode
+RQ2_ICL,Qwen3-8B,fast_solve,math500,-,-,0.892,2290.0,5.80,Highest MATH-500 accuracy
+RQ2_ICL,Qwen3-8B,reduction,math500,-,-,0.882,2456.0,6.10,Thinking mode enabled
+RQ2_ICL,Qwen3-8B,cod,math500,-,-,0.882,1903.0,4.20,Best token efficiency
+RQ2_ICL,Qwen3-8B,proposed_icl,math500,-,-,0.880,2795.0,7.10,PNS-guided exemplars; beats paper ICL (81.2%)
+RQ2_SFT,Qwen3-1.7B,noncausal,gsm8k,1,0.623,-,-,-,epoch 1
+RQ2_SFT,Qwen3-1.7B,noncausal,gsm8k,2,0.384,-,-,-,epoch 2
+RQ2_SFT,Qwen3-1.7B,noncausal,gsm8k,3,0.140,0.8309,220.9,3.5,Final — matches paper Noncausal at 5x smaller scale
+RQ2_SFT,Qwen3-1.7B,causal,gsm8k,1,0.591,-,-,-,epoch 1
+RQ2_SFT,Qwen3-1.7B,causal,gsm8k,2,0.352,-,-,-,epoch 2
+RQ2_SFT,Qwen3-1.7B,causal,gsm8k,3,0.266,0.7726,168.8,1.0,Final — 52.1 fewer tokens than noncausal
+RQ3a_DPO,Qwen3-1.7B,causal_sft_baseline,gsm8k,-,-,0.7726,168.8,-,Starting SFT checkpoint
+RQ3a_DPO,Qwen3-1.7B,dpo_v1,gsm8k,-,0.0098,0.7182,3824.7,-,Unstable; avg tokens inflated
+RQ3a_DPO,Qwen3-1.7B,dpo_v2,gsm8k,-,0.0091,0.6710,1802.1,-,Failed run
+RQ3a_DPO,Qwen3-1.7B,dpo_v3,gsm8k,-,0.0090,0.7614,168.4,-,Intermediate stable run
+RQ3a_DPO,Qwen3-1.7B,dpo_v4_final,gsm8k,-,0.0090,0.7506,172.0,-,Final DPO — 390 pairs; 2.2pp drop (data sparsity)
+RQ3b_SelfDistill,Qwen3-8B,base_no_sft,gsm8k,-,-,0.660,2048.0,29.1,Hits generation cap; truncated
+RQ3b_SelfDistill,Qwen3-8B,noncausal_sft,gsm8k,2,0.140,0.920,261.0,5.6,Teacher chains; 931 records
+RQ3b_SelfDistill,Qwen3-8B,causal_iter1,gsm8k,2,0.266,0.900,143.0,2.0,PNS-filtered teacher; 300 records; 93% token reduction
+RQ3b_SelfDistill,Qwen3-8B,self_distill_iter2,gsm8k,6,0.308,0.900,137.0,2.1,Self-generated + PNS; 62 records; no teacher
