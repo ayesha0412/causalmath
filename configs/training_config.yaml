@@ -1,0 +1,89 @@
+# Training Configuration
+# Used by: scripts/run_training.py and src/causalmath/training/
+
+# --- SFT (Supervised Fine-Tuning) ---
+sft:
+  base_model: "Qwen/Qwen3-1.7B"            # HuggingFace model ID
+  condition: "causal"                        # causal | noncausal
+  data: "data/processed/sft/causal_train.jsonl"
+  output_dir: "outputs/checkpoints/sft/qwen3_causal"
+
+  # LoRA
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:                            # Modules to apply LoRA to
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+  # Training loop
+  epochs: 3
+  batch_size: 4                              # Per-device batch size
+  grad_accum: 4                              # Effective batch = batch_size × grad_accum
+  lr: 5.0e-4
+  lr_scheduler: cosine
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  max_seq_len: 1024
+  seed: 42
+
+  # Quantization (set to true for 7B+ models on 16GB VRAM)
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_double_quant: true
+
+  # Logging
+  logging_steps: 10
+  save_steps: 200
+  save_total_limit: 2
+  report_to: "none"                          # Set to "wandb" to enable W&B logging
+
+# --- 8B self-distillation overrides ---
+sft_8b:
+  base_model: "Qwen/Qwen3-8B"
+  epochs: 2
+  batch_size: 1
+  grad_accum: 8
+  lr: 2.0e-4
+  max_seq_len: 2048
+  load_in_4bit: true
+
+# --- DPO (Direct Preference Optimization) ---
+dpo:
+  sft_adapter: "outputs/checkpoints/sft/qwen3_causal"
+  data: "data/processed/dpo/dpo_pairs_v3.jsonl"
+  output_dir: "outputs/checkpoints/dpo/qwen3_causal_dpo"
+
+  beta: 0.1                                  # KL divergence penalty
+  epochs: 2
+  batch_size: 1
+  grad_accum: 8
+  lr: 5.0e-5
+  max_seq_len: 2048
+
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+
+# --- Self-distillation loop ---
+self_distill:
+  base_model: "Qwen/Qwen3-8B"
+  n_questions: 500                           # New questions to sample per iteration
+  pns_threshold: 0.1                         # Relaxed — chains already short after iter1
+  pns_rollouts: 3
+  lr_schedule:                               # Per-iteration learning rates
+    iter0: 2.0e-4
+    iter1: 1.0e-4
+    iter2_plus: 5.0e-5
+  train_data_dir: "data/processed/self_distill"
+  output_dir: "outputs/checkpoints/self_distill"
+  results_dir: "outputs/results/self_distill"
